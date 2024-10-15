@@ -25,18 +25,19 @@ source "$(dirname "$0")/settings.sh"
 # 9. LINKERD_INJECT               : (optional) Enables Linkerd proxy injection into application deployments. Default is false.
 # 10. LINKERD_ENTERPRISE          : (optional) Flag to enable Linkerd Enterprise installation. Default is false.
 # 11. LINKERD_ENTERPRISE_OPERATOR : (optional) Controls whether to install the Linkerd Enterprise operator (work in progress). Default is false.
-# 12. STEP_ENABLED                : (optional) Enables certificate generation using `step` CLI. Default is false.
-# 13. LINKERD_VIZ_ENABLED         : (optional) Enables Linkerd Viz dashboard installation. Default is false.
-# 14. PROMETHEUS_ENABLED          : (optional) Flag to enable Prometheus installation. Default is false.
-# 15. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
-# 16. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
-# 17. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
-# 18. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
-# 19. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
-# 20. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is localhost:5000. Note: If Minikube is enabled, the registry will be set to the Minikube IP.
-# 21. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 22. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 23. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
+# 12. LINKERD_HTTP_ROUTE_ENABLED  : (optional) Enables HTTP route simulation for Linkerd. Default is false.
+# 13. STEP_ENABLED                : (optional) Enables certificate generation using `step` CLI. Default is false.
+# 14. LINKERD_VIZ_ENABLED         : (optional) Enables Linkerd Viz dashboard installation. Default is false.
+# 15. PROMETHEUS_ENABLED          : (optional) Flag to enable Prometheus installation. Default is false.
+# 16. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
+# 17. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
+# 18. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
+# 19. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
+# 20. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
+# 21. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is localhost:5000. Note: If Minikube is enabled, the registry will be set to the Minikube IP.
+# 22. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 23. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 24. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
 
 # ---------------------------------------------------------
 # Configuration
@@ -48,10 +49,12 @@ MINIKUBE_RUNTIME=docker # cri-o
 MINIKUBE_NODES=3
 MINIKUBE_CPUS=8
 MINIKUBE_MEMORY=12288
+MINIKUBE_CLUSTERS=2
 LINKERD_ENABLED=false
 LINKERD_INJECT=false
 LINKERD_ENTERPRISE=false
 LINKERD_ENTERPRISE_OPERATOR=false # Work in progress
+LINKERD_HTTP_ROUTE_ENABLED=false
 STEP_ENABLED=false
 LINKERD_VIZ_ENABLED=false
 PROMETHEUS_ENABLED=false
@@ -107,16 +110,21 @@ function start_minikube {
     fi
     echo "Starting Minikube..."
     LOCAL_IP=$(hostname -I | awk '{print $1}')
-    echo "Starting Minikube with $MINIKUBE_CPUS CPUs and $MINIKUBE_MEMORY MB memory..."
-    # Start Minikube with specified CPUs, memory, and insecure registry for the local IP
-    minikube start --driver=$MINIKUBE_DRIVER \
-        --container-runtime=$MINIKUBE_RUNTIME \
-        --nodes=$MINIKUBE_NODES \
-        --cpus=$MINIKUBE_CPUS \
-        --memory=$MINIKUBE_MEMORY \
-        --insecure-registry "$LOCAL_IP:5000" \
-        --insecure-registry "10.0.0.0/24"
+    echo "Starting Minikube with $MINIKUBE_CPUS CPUs and $MINIKUBE_MEMORY MB memory with multi-cluster support..."
+    for i in $(seq 1 $MINIKUBE_CLUSTERS); do
+        echo "Starting Minikube cluster $i..."
+        minikube start --driver=$MINIKUBE_DRIVER \
+            --container-runtime=$MINIKUBE_RUNTIME \
+            --nodes=$MINIKUBE_NODES \
+            --cpus=$MINIKUBE_CPUS \
+            --memory=$MINIKUBE_MEMORY \
+            --insecure-registry "$LOCAL_IP:5000" \
+            --insecure-registry "10.0.0.0/24" \
+            --profile "cluster-$i"
+    done
     if [ $MINIKUBE_NODES > 1 ]; then
+        minikube profile "cluster-1"
+        echo "The first Minikube cluster will be used for the registry and shared with the other clusters."
         echo "Enabling Minikube registry addon..."
         minikube addons enable registry
         echo "Port-forwarding Minikube registry to localhost on port 5000..."
@@ -146,6 +154,8 @@ function update_docker_insicure_registries {
         sudo systemctl restart docker
         echo "Docker configuration created and service restarted."
         return
+    else 
+        echo "Docker configuration file already exists. Manually add the $REGISTRY_IP to the insecure registries."
     fi
 }
 
@@ -323,7 +333,7 @@ function build_application {
     fi
     if [ $MINIKUBE_ENABLED == true ] && [ $MINIKUBE_NODES > 1 ]; then
         echo "Building application images and pushing them to the Minikube registry..."
-        APP_IMAGE_REGISTRY_SERVER=$(minikube ip):5000
+        APP_IMAGE_REGISTRY_SERVER=localhost:5000
     fi
     docker build -t $APP_IMAGE_REGISTRY_SERVER/application ./application
     docker build -t $APP_IMAGE_REGISTRY_SERVER/projects ./apis/projects
@@ -378,6 +388,17 @@ function simulate_traffic {
     kubectl apply -f ./bots/bot-get-project-report.yaml
     # kubectl apply -f ./bots/bot-get-comments.yaml
 }
+
+function simulate_http_route {
+    if [ $LINKERD_HTTP_ROUTE_ENABLED == false ]; then
+        echo "Linkerd HTTP route simulation is not enabled. Skipping HTTP route simulation."
+        return
+    fi
+    echo "IMPORTANT: The ingress controller will need to have the Linkerd proxy injected, and the ingress instance will need the 'nginx.ingress.kubernetes.io/service-upstream: "true"' annotation."
+    kubectl apply -f ./manifests/linkerd-http-route.yaml
+    echo "HTTP route simulation is enabled. 80% of traffic to projects will go to the tasks service and 20% to the projects service."
+}
+
 # ---------------------------------------------------------
 # Main Script
 # ---------------------------------------------------------

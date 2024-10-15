@@ -22,13 +22,14 @@ spec:
     - backendRefs:
         - name: projects-vastaya-svc
           port: 80
-          weight: 1
-        - name: projects-canary-vastaya-svc
+          weight: 20
+        - name: tasks-vastaya-svc
           port: 80
-          weight: 0
-      filters:
-      - type: RequestMirror
-        requestMirror:
-          backendRef:
-            name: projects-canary-vastaya-svc
-            port: 80
+          weight: 80
+      # Not available yet
+      # filters:
+      # - type: RequestMirror
+      #   requestMirror:
+      #     backendRef:
+      #       name: tasks-vastaya-svc
+      #       port: 80
