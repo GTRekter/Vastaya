@@ -34,7 +34,7 @@ source "$(dirname "$0")/settings.sh"
 # 18. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
 # 19. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
 # 20. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
-# 21. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is localhost:5000. Note: If Minikube is enabled, the registry will be set to the Minikube IP.
+# 21. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is localhost:5000. 
 # 22. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
 # 23. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
 # 24. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
@@ -330,10 +330,6 @@ function build_application {
     if [ $APP_IMAGE_BUILD_ENABLED == false ]; then
         echo "Application image building is not enabled. Skipping image building."
         return
-    fi
-    if [ $MINIKUBE_ENABLED == true ] && [ $MINIKUBE_NODES > 1 ]; then
-        echo "Building application images and pushing them to the Minikube registry..."
-        APP_IMAGE_REGISTRY_SERVER=localhost:5000
     fi
     docker build -t $APP_IMAGE_REGISTRY_SERVER/application ./application
     docker build -t $APP_IMAGE_REGISTRY_SERVER/projects ./apis/projects
