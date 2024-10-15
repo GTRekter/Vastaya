@@ -48,7 +48,7 @@ service:
 # ==============================================================================
 deployment:
   annotations: {}
-  replicaCount: 1
+  replicaCount: 2
   podAnnotations: {}
   podLabels: {}
   imagePullSecrets: []
@@ -64,8 +64,16 @@ deployment:
   ]
   nodeSelector: {}
   tolerations: []
-  affinity: {}
-
+  # affinity: {}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: agentpool
+            operator: In
+            values:
+            - application
 # ==============================================================================
 # Container values
 # ==============================================================================

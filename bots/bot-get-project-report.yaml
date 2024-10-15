@@ -1,19 +1,31 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: bot-get-tasks-project
+  name: bot-get-project-report
 spec:
+  completions: 5          
+  parallelism: 5          
   template:
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: agentpool
+                operator: In
+                values:
+                - agentpool
       containers:
       - name: project-creator
         image: curlimages/curl:7.78.0 
         command: ["/bin/sh", "-c"] 
         args:
         - |
-          API_URL="http://projects.vastaya.tech/1/tasks"
+          # API_URL="http://projects.vastaya.tech/1/report"
+          API_URL="http://projects-vastaya-svc.vastaya.svc.cluster.local/1/report"
 
-          get_tasks() {
+          get_report() {
             local num_requests=$1
             echo "Getting $num_requests tasks..."
             for i in $(seq 1 $num_requests); do
@@ -28,9 +40,9 @@ spec:
 
           wait_time=10
 
-          for num_requests in 50 500 50000; do
+          for num_requests in 5000 10000 15000; do
             echo "Running with $num_requests requests..."
-            get_tasks $num_requests
+            get_report $num_requests
             echo "Waiting for $wait_time seconds before increasing requests..."
             sleep $wait_time
           done

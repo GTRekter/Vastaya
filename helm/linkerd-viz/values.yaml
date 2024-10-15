@@ -1,5 +1,6 @@
 # grafana:
-#   url: grafana.grafana:3000
+#   url: http://grafana.monitoring.svc.cluster.local:3000
 
+# prometheusUrl: http://prometheus-server.monitoring.svc.cluster.local:9090
 # prometheus:
 #   enabled: false

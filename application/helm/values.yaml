@@ -64,11 +64,19 @@ deployment:
   ]
   nodeSelector: {}
   tolerations: []
-  affinity: {}
-
+  # affinity: {}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: agentpool
+            operator: In
+            values:
+            - application
 # ==============================================================================
 # Container values
-# ==============================================================================
+# ==============================================================================,
 container:
   securityContext: {
     # readOnlyRootFilesystem: true,

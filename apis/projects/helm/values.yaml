@@ -13,7 +13,7 @@ ingress:
   className: nginx
   annotations:
     kubernetes.io/ingress.class: "nginx"
-    # nginx.ingress.kubernetes.io/service-upstream: "true"
+    nginx.ingress.kubernetes.io/service-upstream: "true"
     
     # nginx.ingress.kubernetes.io/proxy-no-cache: "true"
     # nginx.ingress.kubernetes.io/proxy-revalidate: "true"
@@ -71,7 +71,15 @@ deployment:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: agentpool
+            operator: In
+            values:
+            - application
 # ==============================================================================
 # Container values
 # ==============================================================================
@@ -84,7 +92,7 @@ container:
   image:
     # repository: localhost:32773
     name: projects
-    pullPolicy: IfNotPresent
+    pullPolicy: Never
     tag: latest
   # env:
   # - name: REACT_APP_TASKS_API_URL

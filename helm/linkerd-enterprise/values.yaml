@@ -1,0 +1,11 @@
+buoyantCloudEnabled: false
+linkerd-control-plane:
+  destinationController:
+    additionalArgs:
+    - -ext-endpoint-zone-weights
+  proxy:
+    additionalEnv:
+    - name: BUOYANT_BALANCER_LOAD_LOW
+      value: '0.1'
+    - name: BUOYANT_BALANCER_LOAD_HIGH
+      value: '3.0'

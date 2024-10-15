@@ -1,5 +1,5 @@
-
 controller:
+  replicaCount: 3
   podAnnotations:
     # IMPORTANT
     # When you start a NGINX ingress resource, it creates a short live pod named ingress-nginx-admission-create-xxxxx. Injecting Linkerd proxy in this pod will prevent it from terminate.

@@ -2,6 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: bot-get-comments
+  namespace: vastaya
 spec:
   template:
     spec:
@@ -11,7 +12,8 @@ spec:
         command: ["/bin/sh", "-c"] 
         args:
         - |
-          API_URL="http://comments.vastaya.tech/"
+          # API_URL="http://comments.vastaya.tech/"
+          API_URL="http://comments.vastaya.svc.cluster.local/"
 
           get_comments() {
             local num_requests=$1
@@ -28,7 +30,7 @@ spec:
 
           wait_time=10
 
-          for num_requests in 50 500 5000 50000; do
+          for num_requests in 50 500 5000 10000; do
             echo "Running with $num_requests requests..."
             get_comments $num_requests
             echo "Waiting for $wait_time seconds before increasing requests..."

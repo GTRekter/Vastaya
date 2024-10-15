@@ -1,2 +1,3 @@
 # Ignore all .pem files used for certificates
 /certificates
+/scripts/settings.sh
