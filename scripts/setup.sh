@@ -422,9 +422,9 @@ function simulate_traffic {
         echo "Job already exists. Deleting the existing job..."
         kubectl delete job bot-get-project-report
     fi
-    # kubectl apply -f ./bots/bot-get-projects.yaml
-    kubectl apply -f ./bots/bot-get-project-report.yaml
-    # kubectl apply -f ./bots/bot-get-comments.yaml
+    # kubectl apply -f ./manifests/bots/bot-get-projects.yaml
+    kubectl apply -f ./manifests/bots/bot-get-project-report.yaml
+    # kubectl apply -f ./manifests/bots/bot-get-comments.yaml
 }
 
 function simulate_http_route {
