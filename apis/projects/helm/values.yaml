@@ -92,7 +92,7 @@ container:
   image:
     # repository: localhost:32773
     name: projects
-    pullPolicy: Never
+    pullPolicy: IfNotPresent
     tag: latest
   # env:
   # - name: REACT_APP_TASKS_API_URL

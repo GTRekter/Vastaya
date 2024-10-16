@@ -184,14 +184,17 @@ function add_topology_label_to_nodes {
         echo "Minikube is not enabled. Skipping Taxonomy setup."
         return
     fi
-    echo "Adding Taxonomy labels to Minikube nodes..."
-    zone_counter=1
-    nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
-    for node in $nodes; do
-        zone_label="koreacentral-$zone_counter"
-        echo "Labeling node $node with topology.kubernetes.io/zone=$zone_label"
-        kubectl label nodes "$node" topology.kubernetes.io/zone="$zone_label" --overwrite
-        zone_counter=$((zone_counter + 1))
+    for i in $(seq 1 $MINIKUBE_CLUSTERS); do
+        minikube profile "cluster-$i"
+        echo "Adding Taxonomy labels to Minikube nodes in cluster-$i..."
+        zone_counter=1
+        nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
+        for node in $nodes; do
+            zone_label="koreacentral-$zone_counter"
+            echo "Labeling node $node with topology.kubernetes.io/zone=$zone_label"
+            kubectl label nodes "$node" topology.kubernetes.io/zone="$zone_label" --overwrite
+            zone_counter=$((zone_counter + 1))
+        done
     done
 }
 
@@ -205,15 +208,21 @@ function add_agentpool_label_to_nodes {
     nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
     total_nodes=$(echo "$nodes" | wc -l)
     half_nodes=$((total_nodes / 2))
-    for node in $nodes; do
-        if [ $agentpool_counter -le $half_nodes ]; then
-            agentpool_label="system"
-        else
-            agentpool_label="application"
-        fi
-        echo "Labeling node $node with agentpool=$agentpool_label"
-        kubectl label nodes "$node" agentpool="$agentpool_label" --overwrite
-        agentpool_counter=$((agentpool_counter + 1))
+    for i in $(seq 1 $MINIKUBE_CLUSTERS); do
+        minikube profile "cluster-$i"
+        echo "Adding Taxonomy labels to Minikube nodes in cluster-$i..."
+        zone_counter=1
+        nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
+        for node in $nodes; do
+            if [ $agentpool_counter -le $half_nodes ]; then
+                agentpool_label="system"
+            else
+                agentpool_label="application"
+            fi
+            echo "Labeling node $node with agentpool=$agentpool_label"
+            kubectl label nodes "$node" agentpool="$agentpool_label" --overwrite
+            agentpool_counter=$((agentpool_counter + 1))
+        done
     done
 }
 
@@ -371,6 +380,7 @@ function install_application {
     fi
     for i in $(seq 1 $MINIKUBE_CLUSTERS); do
         if [ $i -gt 1 ]; then
+            echo "Switching to the first Minikube cluster to get the application registry server..."
             minikube profile "cluster-1"
             APP_IMAGE_REGISTRY_SERVER=$(minikube ip):5000
         fi
@@ -388,15 +398,19 @@ function inject_linkerd {
         echo "Linkerd injection is not enabled. Skipping Linkerd injection."
         return
     fi
-    kubectl get deploy application-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
-    kubectl get deploy projects-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
-    kubectl get deploy tasks-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
-    kubectl get deploy comments-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
+    for i in $(seq 1 $MINIKUBE_CLUSTERS); do
+        minikube profile "cluster-$i"
+        echo "Injecting Linkerd into the application deployments on cluster-$i..."
+        kubectl get deploy application-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
+        kubectl get deploy projects-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
+        kubectl get deploy tasks-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
+        kubectl get deploy comments-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
 
-    kubectl rollout restart deploy -n vastaya application-vastaya-dplmt
-    kubectl rollout restart deploy -n vastaya projects-vastaya-dplmt
-    kubectl rollout restart deploy -n vastaya tasks-vastaya-dplmt
-    kubectl rollout restart deploy -n vastaya comments-vastaya-dplmt
+        kubectl rollout restart deploy -n vastaya application-vastaya-dplmt
+        kubectl rollout restart deploy -n vastaya projects-vastaya-dplmt
+        kubectl rollout restart deploy -n vastaya tasks-vastaya-dplmt
+        kubectl rollout restart deploy -n vastaya comments-vastaya-dplmt
+    done
 }
 
 function simulate_traffic {
@@ -439,16 +453,16 @@ function cleanup {
 
 # check_tools
 start_minikube
-# add_topology_label_to_nodes
-# add_agentpool_label_to_nodes
-# generate_certificates
-# install_linkerd # Not working normally. Work in progress
-# install_linkerd_viz
-# install_prometheus # Work in progress
-# install_grafana
-# install_nginx
+add_topology_label_to_nodes
+add_agentpool_label_to_nodes
+generate_certificates
+install_linkerd # Not working normally. Work in progress
+install_linkerd_viz
+install_prometheus # Work in progress
+install_grafana
+install_nginx
 build_application
 install_application
-# inject_linkerd
+inject_linkerd
 # simulate_traffic
 # cleanup
