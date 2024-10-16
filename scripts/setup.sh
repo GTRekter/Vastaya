@@ -33,13 +33,14 @@ source "$(dirname "$0")/settings.sh"
 # 17. PROMETHEUS_ENABLED          : (optional) Flag to enable Prometheus installation. Default is false.
 # 18. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
 # 19. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
-# 20. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
-# 21. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
-# 22. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
-# 23. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is empty. 
-# 24. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 25. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 26. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
+# 20. CERT_MANAGER_ENABLED        : (optional) Flag to enable Cert Manager installation. If linkerd is enable, it will configure Linkerd certificates to auto-rotate. Default is false.
+# 21. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
+# 22. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
+# 23. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
+# 24. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is empty. 
+# 25. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 26. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 27. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
 
 # ---------------------------------------------------------
 # Configuration
@@ -53,9 +54,9 @@ MINIKUBE_CPUS=8
 MINIKUBE_MEMORY=12288
 MINIKUBE_CLUSTERS=2
 MINIKUBE_CLEANUP=true
-LINKERD_ENABLED=false
+LINKERD_ENABLED=true
 LINKERD_INJECT=false
-LINKERD_ENTERPRISE=false
+LINKERD_ENTERPRISE=true
 LINKERD_ENTERPRISE_OPERATOR=false # Work in progress
 LINKERD_HTTP_ROUTE_ENABLED=false
 STEP_ENABLED=false
@@ -63,6 +64,7 @@ LINKERD_VIZ_ENABLED=false
 PROMETHEUS_ENABLED=false
 GRAFANA_ENABLED=false
 NGINX_ENABLED=false
+CERT_MANAGER_ENABLED=true
 APP_IMAGE_BUILD_ENABLED=true
 APP_IMAGE_DEPLOY_ENABLED=true
 APP_IMAGE_REGISTRY_LOGIN=false
@@ -184,17 +186,14 @@ function add_topology_label_to_nodes {
         echo "Minikube is not enabled. Skipping Taxonomy setup."
         return
     fi
-    for i in $(seq 1 $MINIKUBE_CLUSTERS); do
-        minikube profile "cluster-$i"
-        echo "Adding Taxonomy labels to Minikube nodes in cluster-$i..."
-        zone_counter=1
-        nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
-        for node in $nodes; do
-            zone_label="koreacentral-$zone_counter"
-            echo "Labeling node $node with topology.kubernetes.io/zone=$zone_label"
-            kubectl label nodes "$node" topology.kubernetes.io/zone="$zone_label" --overwrite
-            zone_counter=$((zone_counter + 1))
-        done
+    echo "Adding Taxonomy labels to Minikube nodes"
+    zone_counter=1
+    nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
+    for node in $nodes; do
+        zone_label="koreacentral-$zone_counter"
+        echo "Labeling node $node with topology.kubernetes.io/zone=$zone_label"
+        kubectl label nodes "$node" topology.kubernetes.io/zone="$zone_label" --overwrite
+        zone_counter=$((zone_counter + 1))
     done
 }
 
@@ -208,21 +207,18 @@ function add_agentpool_label_to_nodes {
     nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
     total_nodes=$(echo "$nodes" | wc -l)
     half_nodes=$((total_nodes / 2))
-    for i in $(seq 1 $MINIKUBE_CLUSTERS); do
-        minikube profile "cluster-$i"
-        echo "Adding Taxonomy labels to Minikube nodes in cluster-$i..."
-        zone_counter=1
-        nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
-        for node in $nodes; do
-            if [ $agentpool_counter -le $half_nodes ]; then
-                agentpool_label="system"
-            else
-                agentpool_label="application"
-            fi
-            echo "Labeling node $node with agentpool=$agentpool_label"
-            kubectl label nodes "$node" agentpool="$agentpool_label" --overwrite
-            agentpool_counter=$((agentpool_counter + 1))
-        done
+    echo "Adding Taxonomy labels to Minikube nodes"
+    zone_counter=1
+    nodes=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
+    for node in $nodes; do
+        if [ $agentpool_counter -le $half_nodes ]; then
+            agentpool_label="system"
+        else
+            agentpool_label="application"
+        fi
+        echo "Labeling node $node with agentpool=$agentpool_label"
+        kubectl label nodes "$node" agentpool="$agentpool_label" --overwrite
+        agentpool_counter=$((agentpool_counter + 1))
     done
 }
 
@@ -240,6 +236,11 @@ function generate_certificates {
 function install_linkerd {
     if [ $LINKERD_ENABLED == false ]; then
         echo "Linkerd is not enabled. Skipping Linkerd setup."
+        uninstall_helm_release linkerd-control-plane
+        uninstall_helm_release linkerd-crds
+        uninstall_helm_release linkerd-enterprise-control-plane
+        uninstall_helm_release linkerd-enterprise-crds
+        uninstall_helm_release linkerd-buoyant
         return
     fi
     # linkerd check --pre
@@ -258,15 +259,26 @@ function install_linkerd {
             helm upgrade --install linkerd-enterprise-crds linkerd-buoyant/linkerd-enterprise-crds \
                 --namespace linkerd \
                 --create-namespace
-            echo "Installing Linkerd Enterprise Control Plane..."
-            helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                --set license=$BUOYANT_LICENSE \
-                -f ./helm/linkerd-enterprise/values.yaml \
-                --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
-                --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
-                --namespace linkerd \
-                --create-namespace 
+            if [ $CERT_MANAGER_ENABLED ]; then 
+                echo "Installing Linkerd Enterprise Control Plane without issuing certificates..."
+                helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                    --set license=$BUOYANT_LICENSE \
+                    -f ./helm/linkerd-enterprise/values.yaml \
+                    --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                    --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
+                    --namespace linkerd \
+                    --create-namespace 
+            else 
+                echo "Installing Linkerd Enterprise Control Plane with issuing certificates..."
+                helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                    --set license=$BUOYANT_LICENSE \
+                    -f ./helm/linkerd-enterprise/values.yaml \
+                    --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                    --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
+                    --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
+                    --namespace linkerd \
+                    --create-namespace 
+            fi
         else 
             echo "Installing Linkerd Enterprise lifecycle automation operator. It will take care of the control plane and crds installation."
             helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
@@ -290,14 +302,24 @@ function install_linkerd {
         helm upgrade --install linkerd-crds linkerd/linkerd-crds \
             --namespace linkerd \
             --create-namespace
-        echo "Installing Linkerd Control Plane..."
-        helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane \
-            --set-file identityTrustAnchorsPEM=certificates/ca.crt \
-            --set-file identity.issuer.tls.crtPEM=certificates/issuer.crt \
-            --set-file identity.issuer.tls.keyPEM=certificates/issuer.key \
-            --set runAsRoot=true \
-            --namespace linkerd \
-            --create-namespace 
+        if [ $CERT_MANAGER_ENABLED ]; then 
+            echo "Installing Linkerd Edge Control Plane without issuing certificates..."
+            helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane \
+                --set-file identityTrustAnchorsPEM=certificates/ca.crt \
+                --set identity.issuer.scheme=kubernetes.io/tls \
+                --set runAsRoot=true \
+                --namespace linkerd \
+                --create-namespace 
+        else
+            echo "Installing Linkerd Edge Control Plane with issuing certificates..."
+            helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane \
+                --set-file identityTrustAnchorsPEM=certificates/ca.crt \
+                --set-file identity.issuer.tls.crtPEM=certificates/issuer.crt \
+                --set-file identity.issuer.tls.keyPEM=certificates/issuer.key \
+                --set runAsRoot=true \
+                --namespace linkerd \
+                --create-namespace 
+        fi  
     fi
     # linkerd check
 }
@@ -305,6 +327,7 @@ function install_linkerd {
 function install_nginx {
     if [ $NGINX_ENABLED == false ]; then
         echo "Nginx is not enabled. Skipping Nginx setup."
+        uninstall_helm_release ingress-nginx
         return
     fi
     helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
@@ -315,6 +338,7 @@ function install_nginx {
 function install_prometheus {
     if [ $PROMETHEUS_ENABLED == false ]; then
         echo "Prometheus is not enabled. Skipping Prometheus setup."
+        uninstall_helm_release prometheus
         return
     fi
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -331,13 +355,14 @@ function install_prometheus {
         --create-namespace  
      if [ $LINKERD_VIZ_ENABLED == false ]; then
         echo "Authorizaing Prometheus to scrape Linkerd..."
-        kubectl apply -f ./manifests/authorization-policy-fedetation-prometheus.yaml
+        kubectl apply -f ./manifests/linkerd/prometheus-federate.yaml
     fi
 }
 
 function install_grafana {
     if [ $GRAFANA_ENABLED == false ]; then
         echo "Linkerd Viz is not enabled. Skipping Linkerd Viz setup."
+        uninstall_helm_release grafana
         return
     fi
     helm repo add grafana https://grafana.github.io/helm-charts
@@ -348,11 +373,39 @@ function install_grafana {
 function install_linkerd_viz {
     if [ $LINKERD_VIZ_ENABLED == false ]; then
         echo "Linkerd Viz is not enabled. Skipping Linkerd Viz setup."
+        uninstall_helm_release linkerd-viz
         return
     fi
     helm repo add linkerd https://helm.linkerd.io/edge
     helm repo update
     helm upgrade --install linkerd-viz linkerd/linkerd-viz --values ./helm/linkerd-viz/values.yaml --create-namespace --namespace linkerd-viz
+}
+
+function install_cert_manager {
+    if [ $CERT_MANAGER_ENABLED == false ]; then
+        echo "Cert Manager is not enabled. Skipping Cert Manager setup."
+        uninstall_helm_release cert-manager
+        return
+    fi
+    echo "Installing Cert Manager..."
+    helm repo add cert-manager https://charts.jetstack.io
+    helm repo update
+    helm upgrade --install cert-manager cert-manager/cert-manager --values ./helm/cert-manager/values.yaml --create-namespace --namespace cert-manager
+    if [ $LINKERD_ENABLED == true ]; then
+        echo "Configuring Cert Manager for Linkerd..."
+
+        kubectl delete secret linkerd-trust-anchor --namespace=linkerd --ignore-not-found
+        kubectl create secret tls linkerd-trust-anchor \
+            --cert=certificates/ca.crt \
+            --key=certificates/ca.key \
+            --namespace=linkerd
+        
+        kubectl delete -f ./manifests/linkerd/cert-manager-issuer.yaml --ignore-not-found
+        kubectl delete -f ./manifests/linkerd/cert-manager-issuer-cert.yaml --ignore-not-found
+
+        kubectl apply -f ./manifests/linkerd/cert-manager-issuer.yaml
+        kubectl apply -f ./manifests/linkerd/cert-manager-issuer-cert.yaml
+    fi
 }
 
 function build_application {
@@ -376,21 +429,37 @@ function build_application {
 function install_application {
     if [ $APP_IMAGE_DEPLOY_ENABLED == false ]; then
         echo "Application image installation is not enabled. Skipping application installation."
+        uninstall_helm_release application
+        uninstall_helm_release projects
+        uninstall_helm_release tasks
+        uninstall_helm_release comments
         return
     fi
-    for i in $(seq 1 $MINIKUBE_CLUSTERS); do
-        if [ $i -gt 1 ]; then
-            echo "Switching to the first Minikube cluster to get the application registry server..."
-            minikube profile "cluster-1"
-            APP_IMAGE_REGISTRY_SERVER=$(minikube ip):5000
-        fi
-        minikube profile "cluster-$i"
-        echo "Installing the application Helm chart on cluster-$i..."
-        helm upgrade --install application --values ./application/helm/values.yaml ./helm/custom/ --create-namespace --namespace vastaya --set container.image.repository=$APP_IMAGE_REGISTRY_SERVER
-        helm upgrade --install projects --values ./apis/projects/helm/values.yaml ./helm/custom/ --create-namespace --namespace vastaya --set container.image.repository=$APP_IMAGE_REGISTRY_SERVER
-        helm upgrade --install tasks --values ./apis/tasks/helm/values.yaml ./helm/custom/ --create-namespace --namespace vastaya --set container.image.repository=$APP_IMAGE_REGISTRY_SERVER
-        helm upgrade --install comments --values ./apis/comments/helm/values.yaml ./helm/custom/ --create-namespace --namespace vastaya --set container.image.repository=$APP_IMAGE_REGISTRY_SERVER
-    done
+    echo "Installing the application Helm chart on cluster-$i..."
+    helm upgrade --install application \
+        --values ./application/helm/values.yaml \
+        --set container.image.repository=$APP_IMAGE_REGISTRY_SERVER \
+        --create-namespace \
+        --namespace vastaya \
+        ./helm/custom/
+    helm upgrade --install projects \
+        --values ./apis/projects/helm/values.yaml \
+        --set container.image.repository=$APP_IMAGE_REGISTRY_SERVER \
+        --create-namespace \
+        --namespace vastaya \
+        ./helm/custom/
+    helm upgrade --install tasks \
+        --values ./apis/tasks/helm/values.yaml \
+        --set container.image.repository=$APP_IMAGE_REGISTRY_SERVER \
+        --create-namespace \
+        --namespace vastaya \
+        ./helm/custom/
+    helm upgrade --install comments \
+        --values ./apis/comments/helm/values.yaml \
+        --set container.image.repository=$APP_IMAGE_REGISTRY_SERVER \
+        --create-namespace \
+        --namespace vastaya \
+        ./helm/custom/
 }
 
 function inject_linkerd {
@@ -418,13 +487,14 @@ function simulate_traffic {
         echo "Application traffic simulation is not enabled. Skipping traffic simulation."
         return
     fi
-    if kubectl get job bot-get-project-report; then
-        echo "Job already exists. Deleting the existing job..."
-        kubectl delete job bot-get-project-report
-    fi
-    # kubectl apply -f ./manifests/bots/bot-get-projects.yaml
+    kubectl delete -f ./manifests/bots/bot-get-project-report.yaml --ignore-not-found
     kubectl apply -f ./manifests/bots/bot-get-project-report.yaml
-    # kubectl apply -f ./manifests/bots/bot-get-comments.yaml
+
+    kubectl delete -f ./manifests/bots/bot-get-project-report.yaml --ignore-not-found
+    kubectl apply -f ./manifests/bots/bot-get-projects.yaml
+
+    kubectl delete -f ./manifests/bots/bot-get-project-report.yaml --ignore-not-found
+    kubectl apply -f ./manifests/bots/bot-get-comments.yaml
 }
 
 function simulate_http_route {
@@ -433,8 +503,19 @@ function simulate_http_route {
         return
     fi
     echo "IMPORTANT: The ingress controller will need to have the Linkerd proxy injected, and the ingress instance will need the 'nginx.ingress.kubernetes.io/service-upstream: "true"' annotation."
-    kubectl apply -f ./manifests/linkerd-http-route.yaml
+    kubectl apply -f ./manifests/linkerd/httproute-gateway.yaml
     echo "HTTP route simulation is enabled. 80% of traffic to projects will go to the tasks service and 20% to the projects service."
+}
+
+function uninstall_helm_release {
+    RELEASE_NAME=$1
+    NAMESPACES=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')
+    for NAMESPACE in $NAMESPACES; do
+        if helm list -n $NAMESPACE | grep -q $RELEASE_NAME; then
+            echo "Uninstalling Helm release: $RELEASE_NAME from namespace: $NAMESPACE"
+            helm uninstall $RELEASE_NAME -n $NAMESPACE
+        fi
+    done
 }
 
 function cleanup {
@@ -451,18 +532,28 @@ function cleanup {
 # Main Script
 # ---------------------------------------------------------
 
-# check_tools
+check_tools
 start_minikube
-add_topology_label_to_nodes
-add_agentpool_label_to_nodes
 generate_certificates
-install_linkerd # Not working normally. Work in progress
-install_linkerd_viz
+build_application
+for i in $(seq 1 $MINIKUBE_CLUSTERS); do
+    if [ $i -gt 1 ]; then
+        echo "Switching to the first Minikube cluster to get the application registry server..."
+        minikube profile "cluster-1"
+        APP_IMAGE_REGISTRY_SERVER=$(minikube ip):5000
+    fi
+    minikube profile "cluster-$i"
+    add_topology_label_to_nodes
+    add_agentpool_label_to_nodes
+    install_linkerd # Not working normally. Work in progress
+    install_cert_manager 
+    install_linkerd_viz
+    install_nginx
+    install_application
+    inject_linkerd
+done
 install_prometheus # Work in progress
 install_grafana
-install_nginx
-build_application
-install_application
-inject_linkerd
+
 # simulate_traffic
 # cleanup
