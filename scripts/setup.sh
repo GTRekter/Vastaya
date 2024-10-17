@@ -34,13 +34,14 @@ source "$(dirname "$0")/settings.sh"
 # 18. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
 # 19. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
 # 20. CERT_MANAGER_ENABLED        : (optional) Flag to enable Cert Manager installation. If linkerd is enable, it will configure Linkerd certificates to auto-rotate. Default is false.
-# 21. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
-# 22. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
-# 23. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
-# 24. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is empty. 
-# 25. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 26. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 27. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
+# 21. DATADOG_ENABLED             : (optional) Flag to enable Datadog installation for monitoring. Default is false.
+# 22. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
+# 23. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
+# 24. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
+# 25. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is empty. 
+# 26. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 27. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 28. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
 
 # ---------------------------------------------------------
 # Configuration
@@ -52,21 +53,22 @@ MINIKUBE_RUNTIME=docker # cri-o
 MINIKUBE_NODES=3
 MINIKUBE_CPUS=8
 MINIKUBE_MEMORY=12288
-MINIKUBE_CLUSTERS=2
-MINIKUBE_CLEANUP=true
+MINIKUBE_CLUSTERS=1
+MINIKUBE_CLEANUP=false
 LINKERD_ENABLED=true
 LINKERD_INJECT=false
 LINKERD_ENTERPRISE=true
 LINKERD_ENTERPRISE_OPERATOR=false # Work in progress
 LINKERD_HTTP_ROUTE_ENABLED=false
-STEP_ENABLED=false
-LINKERD_VIZ_ENABLED=false
+STEP_ENABLED=true
+LINKERD_VIZ_ENABLED=true
 PROMETHEUS_ENABLED=false
 GRAFANA_ENABLED=false
 NGINX_ENABLED=false
-CERT_MANAGER_ENABLED=true
-APP_IMAGE_BUILD_ENABLED=true
-APP_IMAGE_DEPLOY_ENABLED=true
+CERT_MANAGER_ENABLED=false
+DATADOG_ENABLED=false
+APP_IMAGE_BUILD_ENABLED=false
+APP_IMAGE_DEPLOY_ENABLED=false
 APP_IMAGE_REGISTRY_LOGIN=false
 APP_IMAGE_REGISTRY_SERVER=localhost:5000
 APP_TRAFFIC_ENABLED=false
@@ -231,6 +233,7 @@ function generate_certificates {
     mkdir -p ./certificates
     step certificate create root.linkerd.cluster.local ./certificates/ca.crt ./certificates/ca.key --profile root-ca --no-password --insecure
     step certificate create identity.linkerd.cluster.local ./certificates/issuer.crt ./certificates/issuer.key --profile intermediate-ca --not-after 8760h --no-password --insecure --ca ./certificates/ca.crt --ca-key ./certificates/ca.key
+    step certificate create tap.linkerd-viz.svc ./certificates/tap.crt ./certificates/tap.key --profile leaf --not-after 43800h --no-password --insecure --ca ./certificates/ca.crt --ca-key ./certificates/ca.key --san tap.linkerd-viz.svc
 }
 
 function install_linkerd {
@@ -251,7 +254,7 @@ function install_linkerd {
             exit 1
         fi
         curl --proto '=https' --tlsv1.2 -sSfL https://enterprise.buoyant.io/install | sh
-        export PATH=$HOME/.linkerd2/bin:$PATH   
+        export PATH=$HOME/.linkerd2/bin:$PATH
         helm repo add linkerd-buoyant https://helm.buoyant.cloud
         helm repo update
         if [ $LINKERD_ENTERPRISE_OPERATOR == false ]; then
@@ -259,16 +262,7 @@ function install_linkerd {
             helm upgrade --install linkerd-enterprise-crds linkerd-buoyant/linkerd-enterprise-crds \
                 --namespace linkerd \
                 --create-namespace
-            if [ $CERT_MANAGER_ENABLED ]; then 
-                echo "Installing Linkerd Enterprise Control Plane without issuing certificates..."
-                helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                    --set license=$BUOYANT_LICENSE \
-                    -f ./helm/linkerd-enterprise/values.yaml \
-                    --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                    --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
-                    --namespace linkerd \
-                    --create-namespace 
-            else 
+            if [ $CERT_MANAGER_ENABLED == false ]; then 
                 echo "Installing Linkerd Enterprise Control Plane with issuing certificates..."
                 helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
                     --set license=$BUOYANT_LICENSE \
@@ -276,6 +270,17 @@ function install_linkerd {
                     --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
                     --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
                     --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
+                    --set linkerd-control-plane.proxyInit.runAsRoot=true \
+                    --namespace linkerd \
+                    --create-namespace 
+            else 
+                echo "Installing Linkerd Enterprise Control Plane without issuing certificates..."
+                helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                    --set license=$BUOYANT_LICENSE \
+                    -f ./helm/linkerd-enterprise/values.yaml \
+                    --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                    --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
+                    --set linkerd-control-plane.proxyInit.runAsRoot=true \
                     --namespace linkerd \
                     --create-namespace 
             fi
@@ -302,20 +307,20 @@ function install_linkerd {
         helm upgrade --install linkerd-crds linkerd/linkerd-crds \
             --namespace linkerd \
             --create-namespace
-        if [ $CERT_MANAGER_ENABLED ]; then 
-            echo "Installing Linkerd Edge Control Plane without issuing certificates..."
-            helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane \
-                --set-file identityTrustAnchorsPEM=certificates/ca.crt \
-                --set identity.issuer.scheme=kubernetes.io/tls \
-                --set runAsRoot=true \
-                --namespace linkerd \
-                --create-namespace 
-        else
+        if [ $CERT_MANAGER_ENABLED == false ]; then 
             echo "Installing Linkerd Edge Control Plane with issuing certificates..."
             helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane \
                 --set-file identityTrustAnchorsPEM=certificates/ca.crt \
                 --set-file identity.issuer.tls.crtPEM=certificates/issuer.crt \
                 --set-file identity.issuer.tls.keyPEM=certificates/issuer.key \
+                --set runAsRoot=true \
+                --namespace linkerd \
+                --create-namespace 
+        else
+            echo "Installing Linkerd Edge Control Plane without issuing certificates..."
+            helm upgrade --install linkerd-control-plane linkerd/linkerd-control-plane \
+                --set-file identityTrustAnchorsPEM=certificates/ca.crt \
+                --set identity.issuer.scheme=kubernetes.io/tls \
                 --set runAsRoot=true \
                 --namespace linkerd \
                 --create-namespace 
@@ -332,7 +337,8 @@ function install_nginx {
     fi
     helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
     helm repo update
-    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx --values ./helm/nginx/values.yaml
+    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+        --values ./helm/nginx/values.yaml
 }
 
 function install_prometheus {
@@ -345,7 +351,7 @@ function install_prometheus {
     helm repo update
     echo "Installing Kube State Metrics..."
     helm upgrade -install kube-state-metrics prometheus-community/kube-state-metrics \
-        -f ./helm/kube-state-metrics/values.yaml \
+        --values ./helm/kube-state-metrics/values.yaml \
         --namespace monitoring \
         --create-namespace 
     echo "Installing Prometheus..."
@@ -361,13 +367,16 @@ function install_prometheus {
 
 function install_grafana {
     if [ $GRAFANA_ENABLED == false ]; then
-        echo "Linkerd Viz is not enabled. Skipping Linkerd Viz setup."
+        echo "Grafana is not enabled. Skipping Grafana setup."
         uninstall_helm_release grafana
         return
     fi
     helm repo add grafana https://grafana.github.io/helm-charts
     helm repo update
-    helm upgrade --install grafana grafana/grafana --values ./helm/grafana/values.yaml --create-namespace --namespace monitoring
+    helm upgrade --install grafana grafana/grafana \
+        --values ./helm/grafana/values.yaml \
+        --create-namespace \
+        --namespace monitoring
 }
 
 function install_linkerd_viz {
@@ -378,7 +387,24 @@ function install_linkerd_viz {
     fi
     helm repo add linkerd https://helm.linkerd.io/edge
     helm repo update
-    helm upgrade --install linkerd-viz linkerd/linkerd-viz --values ./helm/linkerd-viz/values.yaml --create-namespace --namespace linkerd-viz
+    helm upgrade --install linkerd-viz linkerd/linkerd-viz \
+        --values ./helm/linkerd-viz/values.yaml \
+        --set tap.enabled=true \
+        --set tap.externalSecret=true \
+        --set-file tap.crtPEM=./certificates/tap.key \
+        --set-file tap.keyPEM=./certificates/tap.crt \
+        --set-file tap.caBundle=./certificates/ca.crt \
+        --create-namespace \
+        --namespace linkerd-viz
+
+    kubectl delete secret generic tap-k8s-tls --namespace=linkerd-viz --ignore-not-found
+    kubectl create secret tls tap-k8s-tls \
+        --namespace=linkerd-viz \
+        --cert=./certificates/tap.crt \
+        --key=./certificates/tap.key
+        
+    kubectl rollout restart deploy -n linkerd-viz tap
+
 }
 
 function install_cert_manager {
@@ -390,14 +416,17 @@ function install_cert_manager {
     echo "Installing Cert Manager..."
     helm repo add cert-manager https://charts.jetstack.io
     helm repo update
-    helm upgrade --install cert-manager cert-manager/cert-manager --values ./helm/cert-manager/values.yaml --create-namespace --namespace cert-manager
+    helm upgrade --install cert-manager cert-manager/cert-manager \
+        --values ./helm/cert-manager/values.yaml \
+        --create-namespace \
+        --namespace cert-manager
     if [ $LINKERD_ENABLED == true ]; then
         echo "Configuring Cert Manager for Linkerd..."
 
         kubectl delete secret linkerd-trust-anchor --namespace=linkerd --ignore-not-found
         kubectl create secret tls linkerd-trust-anchor \
-            --cert=certificates/ca.crt \
-            --key=certificates/ca.key \
+            --cert=./certificates/ca.crt \
+            --key=./certificates/ca.key \
             --namespace=linkerd
         
         kubectl delete -f ./manifests/linkerd/cert-manager-issuer.yaml --ignore-not-found
@@ -462,6 +491,25 @@ function install_application {
         ./helm/custom/
 }
 
+function install_datadog {
+    if [ $DATADOG_ENABLED == false ]; then
+        echo "Datadog is not enabled. Skipping Datadog setup."
+        uninstall_helm_release datadog
+        return
+    fi
+    helm repo add datadog https://helm.datadoghq.com
+    helm repo update
+    helm upgrade --install datadog datadog/datadog \
+        --values ./helm/datadog/values.yaml \
+        --create-namespace \
+        --namespace datadog
+    kubectl delete secret generic datadog-secret --namespace=datadog --ignore-not-found
+    kubectl create secret generic datadog-secret \
+        --namespace=datadog \
+        --from-literal=api-key="$DATADOG_API_KEY" 
+    kubectl rollout restart deploy -n datadog datadog-cluster-agent
+}
+
 function inject_linkerd {
     if [ $LINKERD_INJECT == false ]; then
         echo "Linkerd injection is not enabled. Skipping Linkerd injection."
@@ -470,11 +518,46 @@ function inject_linkerd {
     for i in $(seq 1 $MINIKUBE_CLUSTERS); do
         minikube profile "cluster-$i"
         echo "Injecting Linkerd into the application deployments on cluster-$i..."
+
+        echo "Waiting for Linkerd to be ready..."
+        kubectl wait --for=condition=available \
+            --timeout=300s deploy \
+            --namespace=linkerd \
+            linkerd-destination
+        kubectl wait --for=condition=available \
+            --timeout=300s deploy \
+            --namespace=linkerd \
+            linkerd-proxy-injector
+        kubectl wait --for=condition=available \
+            --timeout=300s deploy \
+            --namespace=linkerd \
+            linkerd-identity
+
+        echo "Waiting for application deployments to be ready..."
+        kubectl wait deploy --for=condition=available \
+            --timeout=300s \
+            --namespace=vastaya \
+            application-vastaya-dplmt 
+        kubectl wait deploy --for=condition=available \
+            --timeout=300s \
+            --namespace=vastaya \
+            projects-vastaya-dplmt 
+        kubectl wait deploy --for=condition=available \
+            --timeout=300s \
+            --namespace=vastaya \
+            tasks-vastaya-dplmt 
+        kubectl wait deploy --for=condition=available \
+            --timeout=300s \
+            --namespace=vastaya \
+            comments-vastaya-dplmt 
+
+        echo "Injecting Linkerd into the application deployments..."
         kubectl get deploy application-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
         kubectl get deploy projects-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
         kubectl get deploy tasks-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
         kubectl get deploy comments-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
 
+        echo "Restarting the application deployments..."
         kubectl rollout restart deploy -n vastaya application-vastaya-dplmt
         kubectl rollout restart deploy -n vastaya projects-vastaya-dplmt
         kubectl rollout restart deploy -n vastaya tasks-vastaya-dplmt
@@ -490,10 +573,10 @@ function simulate_traffic {
     kubectl delete -f ./manifests/bots/bot-get-project-report.yaml --ignore-not-found
     kubectl apply -f ./manifests/bots/bot-get-project-report.yaml
 
-    kubectl delete -f ./manifests/bots/bot-get-project-report.yaml --ignore-not-found
+    kubectl delete -f ./manifests/bots/bot-get-projects.yaml --ignore-not-found
     kubectl apply -f ./manifests/bots/bot-get-projects.yaml
 
-    kubectl delete -f ./manifests/bots/bot-get-project-report.yaml --ignore-not-found
+    kubectl delete -f ./manifests/bots/bot-get-comments.yaml --ignore-not-found
     kubectl apply -f ./manifests/bots/bot-get-comments.yaml
 }
 
@@ -552,8 +635,9 @@ for i in $(seq 1 $MINIKUBE_CLUSTERS); do
     install_application
     inject_linkerd
 done
+install_datadog
 install_prometheus # Work in progress
 install_grafana
 
-# simulate_traffic
+simulate_traffic
 # cleanup

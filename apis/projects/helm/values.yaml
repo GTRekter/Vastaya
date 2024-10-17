@@ -55,7 +55,8 @@ service:
 deployment:
   annotations: {}
   replicaCount: 1
-  podAnnotations: {}
+  podAnnotations: 
+    config.alpha.linkerd.io/proxy-enable-native-sidecar: "true"
   podLabels: {}
   imagePullSecrets: []
   podSecurityContext: {}

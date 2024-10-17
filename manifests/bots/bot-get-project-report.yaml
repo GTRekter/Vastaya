@@ -15,7 +15,7 @@ spec:
               - key: agentpool
                 operator: In
                 values:
-                - agentpool
+                - system
       containers:
       - name: project-creator
         image: curlimages/curl:7.78.0 

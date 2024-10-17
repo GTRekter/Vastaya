@@ -1,0 +1,28 @@
+registry: "gcr.io/datadoghq"
+datadog:
+  apiKeyExistingSecret: "datadog-secret"
+  site: "ap1.datadoghq.com"
+  agent:
+    image:
+      name: "gcr.io/datadoghq/agent"
+      tag: "7.45.0"  # Replace with the latest version if newer
+  kubelet:
+    tlsVerify: false
+  logs:
+    enabled: true
+    containerCollectAll: true
+  securityAgent:
+    compliance:
+      enabled: false
+    runtime:
+      enabled: false
+  processAgent:
+    enabled: true
+  orchestratorExplorer:
+    enabled: false
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  etcd:
+    enabled: false
