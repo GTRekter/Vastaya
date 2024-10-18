@@ -1,11 +1,15 @@
 registry: "gcr.io/datadoghq"
 datadog:
-  apiKeyExistingSecret: "datadog-secret"
+  clusterName: raccoon
   site: "ap1.datadoghq.com"
-  agent:
-    image:
-      name: "gcr.io/datadoghq/agent"
-      tag: "7.45.0"  # Replace with the latest version if newer
+  apiKeyExistingSecret: "datadog-secret"
+  kubeStateMetricsEnabled: false
+  kubeStateMetricsCore:
+    enabled: true
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
   kubelet:
     tlsVerify: false
   logs:
@@ -17,12 +21,28 @@ datadog:
     runtime:
       enabled: false
   processAgent:
-    enabled: true
+    enabled: false
   orchestratorExplorer:
     enabled: false
-  kubeControllerManager:
-    enabled: false
-  kubeScheduler:
-    enabled: false
+  helmCheck:
+    enabled: true
+    collectEvents: true
   etcd:
     enabled: false
+  confd:
+    linkerd.yaml: |
+      init_config:
+    # linkerd.yaml: |-
+    #   cluster_check: false
+    #   init_config:
+    #   instances:
+    #   - openmetrics_endpoint: http://%%host%%:4191/metrics
+
+clusterAgent:
+  enabled: true
+  confd:
+    linkerd.yaml: |-
+      cluster_check: false
+      init_config:
+      instances:
+      - openmetrics_endpoint: http://%%host%%:4191/metrics

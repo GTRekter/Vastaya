@@ -28,20 +28,21 @@ source "$(dirname "$0")/settings.sh"
 # 12. LINKERD_ENTERPRISE          : (optional) Flag to enable Linkerd Enterprise installation. Default is false.
 # 13. LINKERD_ENTERPRISE_OPERATOR : (optional) Controls whether to install the Linkerd Enterprise operator (work in progress). Default is false.
 # 14. LINKERD_HTTP_ROUTE_ENABLED  : (optional) Enables HTTP route simulation for Linkerd. Default is false.
-# 15. STEP_ENABLED                : (optional) Enables certificate generation using `step` CLI. Default is false.
-# 16. LINKERD_VIZ_ENABLED         : (optional) Enables Linkerd Viz dashboard installation. Default is false.
-# 17. PROMETHEUS_ENABLED          : (optional) Flag to enable Prometheus installation. Default is false.
-# 18. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
-# 19. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
-# 20. CERT_MANAGER_ENABLED        : (optional) Flag to enable Cert Manager installation. If linkerd is enable, it will configure Linkerd certificates to auto-rotate. Default is false.
-# 21. DATADOG_ENABLED             : (optional) Flag to enable Datadog installation for monitoring. Default is false.
-# 22. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
-# 23. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
-# 24. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
-# 25. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is empty. 
-# 26. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 27. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 28. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
+# 15. LINKERD_CLOUD_ENABLED       : (optional) Enables Linkerd Cloud dashboard installation. Default is false.
+# 16. STEP_ENABLED                : (optional) Enables certificate generation using `step` CLI. Default is false.
+# 17. LINKERD_VIZ_ENABLED         : (optional) Enables Linkerd Viz dashboard installation. Default is false.
+# 18. PROMETHEUS_ENABLED          : (optional) Flag to enable Prometheus installation. Default is false.
+# 19. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
+# 20. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
+# 21. CERT_MANAGER_ENABLED        : (optional) Flag to enable Cert Manager installation. If linkerd is enable, it will configure Linkerd certificates to auto-rotate. Default is false.
+# 22. DATADOG_ENABLED             : (optional) Flag to enable Datadog installation for monitoring. Default is false.
+# 23. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
+# 24. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
+# 25. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
+# 26. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is empty. 
+# 27. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 28. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 29. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
 
 # ---------------------------------------------------------
 # Configuration
@@ -58,17 +59,18 @@ MINIKUBE_CLEANUP=false
 LINKERD_ENABLED=true
 LINKERD_INJECT=false
 LINKERD_ENTERPRISE=true
-LINKERD_ENTERPRISE_OPERATOR=false # Work in progress
+LINKERD_ENTERPRISE_OPERATOR=true # Work in progress
 LINKERD_HTTP_ROUTE_ENABLED=false
+LINKERD_CLOUD_ENABLED=true
 STEP_ENABLED=true
-LINKERD_VIZ_ENABLED=true
+LINKERD_VIZ_ENABLED=false
 PROMETHEUS_ENABLED=false
 GRAFANA_ENABLED=false
 NGINX_ENABLED=false
 CERT_MANAGER_ENABLED=false
 DATADOG_ENABLED=false
 APP_IMAGE_BUILD_ENABLED=false
-APP_IMAGE_DEPLOY_ENABLED=false
+APP_IMAGE_DEPLOY_ENABLED=true
 APP_IMAGE_REGISTRY_LOGIN=false
 APP_IMAGE_REGISTRY_SERVER=localhost:5000
 APP_TRAFFIC_ENABLED=false
@@ -263,39 +265,111 @@ function install_linkerd {
                 --namespace linkerd \
                 --create-namespace
             if [ $CERT_MANAGER_ENABLED == false ]; then 
-                echo "Installing Linkerd Enterprise Control Plane with issuing certificates..."
-                helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                    --set license=$BUOYANT_LICENSE \
-                    -f ./helm/linkerd-enterprise/values.yaml \
-                    --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                    --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
-                    --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
-                    --set linkerd-control-plane.proxyInit.runAsRoot=true \
-                    --namespace linkerd \
-                    --create-namespace 
+                if [ $LINKERD_CLOUD_ENABLED == false ]; then
+                    echo "Installing Linkerd Enterprise Control Plane with issuing certificates and without Linkerd Cloud..."
+                    helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                        --values ./helm/linkerd-enterprise/values.yaml \
+                        --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                        --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
+                        --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
+                        --set buoyantCloudEnabled=false \
+                        --set license=$BUOYANT_LICENSE \
+                        --namespace linkerd \
+                        --create-namespace 
+                else 
+                    echo "Installing Linkerd Enterprise Control Plane with issuing certificates and Linkerd Cloud..."
+                    helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                        --values ./helm/linkerd-enterprise/values.yaml \
+                        --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                        --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
+                        --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
+                        --set buoyantCloudEnabled=true \
+                        --set metadata.agentName=Minikube \
+                        --set license=$BUOYANT_LICENSE \
+                        --set api.clientID=$API_CLIENT_ID \
+                        --set api.clientSecret=$API_CLIENT_SECRET \
+                        --namespace linkerd \
+                        --create-namespace 
+                fi
             else 
-                echo "Installing Linkerd Enterprise Control Plane without issuing certificates..."
-                helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                    --set license=$BUOYANT_LICENSE \
-                    -f ./helm/linkerd-enterprise/values.yaml \
-                    --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                    --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
-                    --set linkerd-control-plane.proxyInit.runAsRoot=true \
-                    --namespace linkerd \
-                    --create-namespace 
+                if [ $LINKERD_CLOUD_ENABLED == false ]; then
+                    echo "Installing Linkerd Enterprise Control Plane without issuing certificates and without Linkerd Cloud..."
+                    helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                        --values ./helm/linkerd-enterprise/values.yaml \
+                        --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                        --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
+                        --set buoyantCloudEnabled=false \
+                        --set license=$BUOYANT_LICENSE \
+                        --namespace linkerd \
+                        --create-namespace 
+                else 
+                    echo "Installing Linkerd Enterprise Control Plane without issuing certificates and Linkerd Cloud..."
+                    helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                        --values ./helm/linkerd-enterprise/values.yaml \
+                        --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                        --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
+                        --set buoyantCloudEnabled=true \
+                        --set metadata.agentName=Minikube \
+                        --set license=$BUOYANT_LICENSE \
+                        --set api.clientID=$API_CLIENT_ID \
+                        --set api.clientSecret=$API_CLIENT_SECRET \
+                        --namespace linkerd \
+                        --create-namespace 
+                fi
             fi
         else 
-            echo "Installing Linkerd Enterprise lifecycle automation operator. It will take care of the control plane and crds installation."
-            helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
-                --set buoyantCloudEnabled=false \
-                --set license=$BUOYANT_LICENSE \
-                --set controlPlaneValidator.externalSecret=true \
-                --set-file controlPlaneValidator.crtPEM=./certificates/issuer.key \
-                --set-file controlPlaneValidator.keyPEM=./certificates/issuer.crt \
-                --set-file controlPlaneValidator.caBundle=./certificates/ca.crt \
-                --namespace linkerd-buoyant \
-                --create-namespace
+            if [ $LINKERD_CLOUD_ENABLED == false ]; then
+                echo "Installing Linkerd Enterprise lifecycle automation operator. It will take care of the control plane and crds installation."
+                # helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
+                #     --set-file controlPlaneValidator.crtPEM=./certificates/issuer.key \
+                #     --set-file controlPlaneValidator.keyPEM=./certificates/issuer.crt \
+                #     --set-file controlPlaneValidator.caBundle=./certificates/ca.crt \
+                #     --set controlPlaneValidator.externalSecret=true \
+                #     --set buoyantCloudEnabled=false \
+                #     --set license=$BUOYANT_LICENSE \
+                #     --namespace linkerd-buoyant \
+                #     --create-namespace
+                helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
+                    --set buoyantCloudEnabled=false \
+                    --set license=$BUOYANT_LICENSE \
+                    --namespace linkerd-buoyant \
+                    --create-namespace
+            else
+                # echo "Installing Linkerd Enterprise lifecycle automation operator. It will take care of the control plane and crds installation."
+                # helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
+                #     --set-file controlPlaneValidator.crtPEM=./certificates/issuer.key \
+                #     --set-file controlPlaneValidator.keyPEM=./certificates/issuer.crt \
+                #     --set-file controlPlaneValidator.caBundle=./certificates/ca.crt \
+                #     --set controlPlaneValidator.externalSecret=true \
+                #     --set buoyantCloudEnabled=true \
+                #     --set metadata.agentName=Minikube \
+                #     --set api.clientID=$API_CLIENT_ID \
+                #     --set api.clientSecret=$API_CLIENT_SECRET \
+                #     --set license=$BUOYANT_LICENSE \
+                #     --namespace linkerd-buoyant \
+                #     --create-namespace
+                echo "Installing Linkerd Enterprise lifecycle automation operator. It will take care of the control plane and crds installation."
+                helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
+                    --set buoyantCloudEnabled=true \
+                    --set metadata.agentName=Minikube \
+                    --set api.clientID=$API_CLIENT_ID \
+                    --set api.clientSecret=$API_CLIENT_SECRET \
+                    --set license=$BUOYANT_LICENSE \
+                    --namespace linkerd-buoyant \
+                    --create-namespace
+            fi
+            
             # TODO: Add the secrets to the control plane
+            kubectl delete secret linkerd-identity-issuer --namespace=linkerd --ignore-not-found
+            kubectl create secret generic linkerd-identity-issuer \
+                --namespace=linkerd \
+                --from-file=ca.crt=./certificates/ca.crt \
+                --from-file=tls.crt=./certificates/issuer.crt \
+                --from-file=tls.key=./certificates/issuer.key
+
+            CERT_CONTENT=$(cat ./certificates/ca.crt | sed 's/^/          /')
+            awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found -f - 
+            awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl apply -f -
         fi
     else
         echo "Installing Linkerd..."
@@ -344,6 +418,7 @@ function install_nginx {
 function install_prometheus {
     if [ $PROMETHEUS_ENABLED == false ]; then
         echo "Prometheus is not enabled. Skipping Prometheus setup."
+        uninstall_helm_release kube-state-metrics
         uninstall_helm_release prometheus
         return
     fi
@@ -402,7 +477,7 @@ function install_linkerd_viz {
         --namespace=linkerd-viz \
         --cert=./certificates/tap.crt \
         --key=./certificates/tap.key
-        
+
     kubectl rollout restart deploy -n linkerd-viz tap
 
 }
@@ -628,7 +703,7 @@ for i in $(seq 1 $MINIKUBE_CLUSTERS); do
     minikube profile "cluster-$i"
     add_topology_label_to_nodes
     add_agentpool_label_to_nodes
-    install_linkerd # Not working normally. Work in progress
+    install_linkerd
     install_cert_manager 
     install_linkerd_viz
     install_nginx

@@ -1,0 +1,15 @@
+apiVersion: linkerd.buoyant.io/v1alpha1
+kind: ControlPlane
+metadata:
+  name: linkerd-control-plane
+spec:
+  components:
+    linkerd:
+      version: enterprise-2.16.1
+      license: PLACEHOLDER_LICENSE
+      controlPlaneConfig:
+        identityTrustAnchorsPEM: |
+PLACEHOLDER_CERTIFICATE
+        identity:
+          issuer:
+            scheme: kubernetes.io/tls

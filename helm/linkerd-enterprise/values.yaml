@@ -1,5 +1,6 @@
-buoyantCloudEnabled: false
 linkerd-control-plane:
+  proxyInit:
+    runAsRoot: true
   destinationController:
     additionalArgs:
     - -ext-endpoint-zone-weights
