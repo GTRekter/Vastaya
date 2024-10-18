@@ -49,22 +49,22 @@ source "$(dirname "$0")/settings.sh"
 # ---------------------------------------------------------
 
 MINIKUBE_ENABLED=true
-MINIKUBE_DRIVER=docker # podman
-MINIKUBE_RUNTIME=docker # cri-o
+MINIKUBE_DRIVER=docker
+MINIKUBE_RUNTIME=docker
 MINIKUBE_NODES=3
 MINIKUBE_CPUS=8
 MINIKUBE_MEMORY=12288
 MINIKUBE_CLUSTERS=1
 MINIKUBE_CLEANUP=false
 LINKERD_ENABLED=true
-LINKERD_INJECT=false
+LINKERD_INJECT=true
 LINKERD_ENTERPRISE=true
-LINKERD_ENTERPRISE_OPERATOR=true # Work in progress
+LINKERD_ENTERPRISE_OPERATOR=false
 LINKERD_HTTP_ROUTE_ENABLED=false
-LINKERD_CLOUD_ENABLED=true
-STEP_ENABLED=true
+LINKERD_CLOUD_ENABLED=false
+STEP_ENABLED=false
 LINKERD_VIZ_ENABLED=false
-PROMETHEUS_ENABLED=false
+PROMETHEUS_ENABLED=true
 GRAFANA_ENABLED=false
 NGINX_ENABLED=false
 CERT_MANAGER_ENABLED=false
@@ -246,6 +246,9 @@ function install_linkerd {
         uninstall_helm_release linkerd-enterprise-control-plane
         uninstall_helm_release linkerd-enterprise-crds
         uninstall_helm_release linkerd-buoyant
+        kubectl delete secret linkerd-identity-issuer --namespace=linkerd --ignore-not-found
+        CERT_CONTENT=$(cat ./certificates/ca.crt | sed 's/^/          /')
+        awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found -f - 
         return
     fi
     # linkerd check --pre
@@ -320,34 +323,12 @@ function install_linkerd {
         else 
             if [ $LINKERD_CLOUD_ENABLED == false ]; then
                 echo "Installing Linkerd Enterprise lifecycle automation operator. It will take care of the control plane and crds installation."
-                # helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
-                #     --set-file controlPlaneValidator.crtPEM=./certificates/issuer.key \
-                #     --set-file controlPlaneValidator.keyPEM=./certificates/issuer.crt \
-                #     --set-file controlPlaneValidator.caBundle=./certificates/ca.crt \
-                #     --set controlPlaneValidator.externalSecret=true \
-                #     --set buoyantCloudEnabled=false \
-                #     --set license=$BUOYANT_LICENSE \
-                #     --namespace linkerd-buoyant \
-                #     --create-namespace
                 helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
                     --set buoyantCloudEnabled=false \
                     --set license=$BUOYANT_LICENSE \
                     --namespace linkerd-buoyant \
                     --create-namespace
             else
-                # echo "Installing Linkerd Enterprise lifecycle automation operator. It will take care of the control plane and crds installation."
-                # helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
-                #     --set-file controlPlaneValidator.crtPEM=./certificates/issuer.key \
-                #     --set-file controlPlaneValidator.keyPEM=./certificates/issuer.crt \
-                #     --set-file controlPlaneValidator.caBundle=./certificates/ca.crt \
-                #     --set controlPlaneValidator.externalSecret=true \
-                #     --set buoyantCloudEnabled=true \
-                #     --set metadata.agentName=Minikube \
-                #     --set api.clientID=$API_CLIENT_ID \
-                #     --set api.clientSecret=$API_CLIENT_SECRET \
-                #     --set license=$BUOYANT_LICENSE \
-                #     --namespace linkerd-buoyant \
-                #     --create-namespace
                 echo "Installing Linkerd Enterprise lifecycle automation operator. It will take care of the control plane and crds installation."
                 helm upgrade --install linkerd-buoyant linkerd-buoyant/linkerd-buoyant \
                     --set buoyantCloudEnabled=true \
@@ -358,17 +339,15 @@ function install_linkerd {
                     --namespace linkerd-buoyant \
                     --create-namespace
             fi
-            
-            # TODO: Add the secrets to the control plane
             kubectl delete secret linkerd-identity-issuer --namespace=linkerd --ignore-not-found
             kubectl create secret generic linkerd-identity-issuer \
                 --namespace=linkerd \
                 --from-file=ca.crt=./certificates/ca.crt \
                 --from-file=tls.crt=./certificates/issuer.crt \
                 --from-file=tls.key=./certificates/issuer.key
-
             CERT_CONTENT=$(cat ./certificates/ca.crt | sed 's/^/          /')
             awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found -f - 
+            sleep 5 # TODO: Find a better way to wait for the deletion of the control plane
             awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl apply -f -
         fi
     else
@@ -430,11 +409,16 @@ function install_prometheus {
         --namespace monitoring \
         --create-namespace 
     echo "Installing Prometheus..."
-    helm upgrade --install prometheus prometheus-community/prometheus \
-        --values ./helm/prometheus/values.yaml \
-        --namespace monitoring \
-        --create-namespace  
-     if [ $LINKERD_VIZ_ENABLED == false ]; then
+    if [ $LINKERD_VIZ_ENABLED == false ]; then
+        helm upgrade --install prometheus prometheus-community/prometheus \
+            --values ./helm/prometheus/values.yaml \
+            --namespace monitoring \
+            --create-namespace  
+    else
+        helm upgrade --install prometheus prometheus-community/prometheus \
+            --values ./helm/prometheus/values-federation-viz.yaml \
+            --namespace monitoring \
+            --create-namespace   
         echo "Authorizaing Prometheus to scrape Linkerd..."
         kubectl apply -f ./manifests/linkerd/prometheus-federate.yaml
     fi
