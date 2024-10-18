@@ -1,18 +1,22 @@
-# affinity:
-#   nodeAffinity:
-#     requiredDuringSchedulingIgnoredDuringExecution:
-#       nodeSelectorTerms:
-#       - matchExpressions:
-#         - key: agentpool
-#           operator: In
-#           values:
-#           - system
 server:
   securityContext:
     runAsUser: 0
     runAsNonRoot: false
     runAsGroup: 0
     fsGroup: 0
+  global:
+    scrape_interval: 10s
+    scrape_timeout: 10s
+    evaluation_interval: 10s
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: agentpool
+            operator: In
+            values:
+            - system
 extraScrapeConfigs: |
   - job_name: 'linkerd-controller'
     kubernetes_sd_configs:

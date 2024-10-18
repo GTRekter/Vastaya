@@ -1,12 +1,13 @@
-affinity:
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-      - matchExpressions:
-        - key: agentpool
-          operator: In
-          values:
-          - system
+server:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: agentpool
+            operator: In
+            values:
+            - system
 # Federation with Linkerd Viz Prometheus
 extraScrapeConfigs: |
   - job_name: 'linkerd'
