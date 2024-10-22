@@ -9,6 +9,7 @@ spec:
   renewBefore: 55m 
   issuerRef:
     name: linkerd-trust-anchor
+    # kind: ClusterIssuer
     kind: Issuer
   commonName: identity.linkerd.cluster.local
   dnsNames:

@@ -13,7 +13,7 @@ spec:
         args:
         - |
           # API_URL="http://projects.vastaya.tech/"
-          API_URL="http://projects.vastaya.svc.cluster.local/"
+          API_URL="http://projects-vastaya-svc.vastaya.svc.cluster.local"
 
           get_projects() {
             local num_requests=$1

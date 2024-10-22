@@ -25,6 +25,12 @@ The application architecture is composed of the following components:
 
 ![Diagram](assets/diagram.png)
 ## Minikube Setup
+**NOTE**: If you have both Podman and Docker in the same environment you might face the case where minikube is using the Podman Engine as Server runtime and get `PROVIDER_DOCKER_NOT_RUNNING`. You can check this by executing `docker version`. To solve this issue you will need to:
+```
+nano ~/.bashrc
+export DOCKER_HOST=unix:///var/run/docker.sock
+source ~/.bashrc
+```
 ### Using Podman
 Configure Minikube to use Podman as the driver and CRI-O as the container runtime:
 ```

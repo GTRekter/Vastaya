@@ -29,8 +29,8 @@ source "$(dirname "$0")/settings.sh"
 # 13. LINKERD_ENTERPRISE_OPERATOR : (optional) Controls whether to install the Linkerd Enterprise operator (work in progress). Default is false.
 # 14. LINKERD_HTTP_ROUTE_ENABLED  : (optional) Enables HTTP route simulation for Linkerd. Default is false.
 # 15. LINKERD_CLOUD_ENABLED       : (optional) Enables Linkerd Cloud dashboard installation. Default is false.
-# 16. STEP_ENABLED                : (optional) Enables certificate generation using `step` CLI. Default is false.
-# 17. LINKERD_VIZ_ENABLED         : (optional) Enables Linkerd Viz dashboard installation. Default is false.
+# 16. LINKERD_VIZ_ENABLED         : (optional) Enables Linkerd Viz dashboard installation. Default is false.
+# 17. STEP_ENABLED                : (optional) Enables certificate generation using `step` CLI. Default is false.
 # 18. PROMETHEUS_ENABLED          : (optional) Flag to enable Prometheus installation. Default is false.
 # 19. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
 # 20. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
@@ -57,20 +57,20 @@ MINIKUBE_MEMORY=12288
 MINIKUBE_CLUSTERS=1
 MINIKUBE_CLEANUP=false
 LINKERD_ENABLED=true
-LINKERD_INJECT=true
+LINKERD_INJECT=false
 LINKERD_ENTERPRISE=true
 LINKERD_ENTERPRISE_OPERATOR=false
 LINKERD_HTTP_ROUTE_ENABLED=false
 LINKERD_CLOUD_ENABLED=false
-STEP_ENABLED=false
-LINKERD_VIZ_ENABLED=false
-PROMETHEUS_ENABLED=true
+LINKERD_VIZ_ENABLED=true
+STEP_ENABLED=true
+PROMETHEUS_ENABLED=false
 GRAFANA_ENABLED=false
 NGINX_ENABLED=false
-CERT_MANAGER_ENABLED=false
+CERT_MANAGER_ENABLED=true
 DATADOG_ENABLED=false
 APP_IMAGE_BUILD_ENABLED=false
-APP_IMAGE_DEPLOY_ENABLED=true
+APP_IMAGE_DEPLOY_ENABLED=false
 APP_IMAGE_REGISTRY_LOGIN=false
 APP_IMAGE_REGISTRY_SERVER=localhost:5000
 APP_TRAFFIC_ENABLED=false
@@ -233,22 +233,39 @@ function generate_certificates {
     fi
     rm -rf ./certificates
     mkdir -p ./certificates
-    step certificate create root.linkerd.cluster.local ./certificates/ca.crt ./certificates/ca.key --profile root-ca --no-password --insecure
-    step certificate create identity.linkerd.cluster.local ./certificates/issuer.crt ./certificates/issuer.key --profile intermediate-ca --not-after 8760h --no-password --insecure --ca ./certificates/ca.crt --ca-key ./certificates/ca.key
-    step certificate create tap.linkerd-viz.svc ./certificates/tap.crt ./certificates/tap.key --profile leaf --not-after 43800h --no-password --insecure --ca ./certificates/ca.crt --ca-key ./certificates/ca.key --san tap.linkerd-viz.svc
+    step certificate create root.linkerd.cluster.local ./certificates/ca.crt ./certificates/ca.key \
+        --profile root-ca \
+        --no-password \
+        --insecure
+    step certificate create identity.linkerd.cluster.local ./certificates/issuer.crt ./certificates/issuer.key \
+        --profile intermediate-ca \
+        --not-after 8760h \
+        --no-password \
+        --insecure \
+        --ca ./certificates/ca.crt \
+        --ca-key ./certificates/ca.key
+    step certificate create tap.linkerd-viz.svc ./certificates/tap.crt ./certificates/tap.key \
+        --profile leaf \
+        --not-after 43800h \
+        --no-password \
+        --insecure \
+        --ca ./certificates/ca.crt \
+        --ca-key ./certificates/ca.key \
+        --san tap.linkerd-viz.svc
 }
 
 function install_linkerd {
     if [ $LINKERD_ENABLED == false ]; then
         echo "Linkerd is not enabled. Skipping Linkerd setup."
+        kubectl delete secret linkerd-identity-issuer --namespace=linkerd --ignore-not-found
+        # TODO: the crds might not exist
+        # CERT_CONTENT=$(cat ./certificates/ca.crt | sed 's/^/          /')
+        # awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found -f - 
         uninstall_helm_release linkerd-control-plane
         uninstall_helm_release linkerd-crds
         uninstall_helm_release linkerd-enterprise-control-plane
         uninstall_helm_release linkerd-enterprise-crds
         uninstall_helm_release linkerd-buoyant
-        kubectl delete secret linkerd-identity-issuer --namespace=linkerd --ignore-not-found
-        CERT_CONTENT=$(cat ./certificates/ca.crt | sed 's/^/          /')
-        awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found -f - 
         return
     fi
     # linkerd check --pre
@@ -280,6 +297,7 @@ function install_linkerd {
                         --namespace linkerd \
                         --create-namespace 
                 else 
+                    # TODO: Not installing the cloud agent :(
                     echo "Installing Linkerd Enterprise Control Plane with issuing certificates and Linkerd Cloud..."
                     helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
                         --values ./helm/linkerd-enterprise/values.yaml \
@@ -446,16 +464,28 @@ function install_linkerd_viz {
     fi
     helm repo add linkerd https://helm.linkerd.io/edge
     helm repo update
-    helm upgrade --install linkerd-viz linkerd/linkerd-viz \
-        --values ./helm/linkerd-viz/values.yaml \
-        --set tap.enabled=true \
-        --set tap.externalSecret=true \
-        --set-file tap.crtPEM=./certificates/tap.key \
-        --set-file tap.keyPEM=./certificates/tap.crt \
-        --set-file tap.caBundle=./certificates/ca.crt \
-        --create-namespace \
-        --namespace linkerd-viz
 
+    if [ $CERT_MANAGER_ENABLED == false ]; then  
+        helm upgrade --install linkerd-viz linkerd/linkerd-viz \
+            --values ./helm/linkerd-viz/values.yaml \
+            --set tap.enabled=true \
+            --set tap.externalSecret=true \
+            --set-file tap.crtPEM=./certificates/tap.key \
+            --set-file tap.keyPEM=./certificates/tap.crt \
+            --set-file tap.caBundle=./certificates/ca.crt \
+            --create-namespace \
+            --namespace linkerd-viz
+    else 
+        helm upgrade --install linkerd-viz linkerd/linkerd-viz \
+            --values ./helm/linkerd-viz/values.yaml \
+            --set tap.enabled=true \
+            --set tap.externalSecret=true \
+            --set tap.injectCaFrom=linkerd-viz/tap \
+            --set tapInjector.externalSecret=true \
+            --set tapInjector.injectCaFrom=linkerd-viz/linkerd-tap-injector \
+            --create-namespace \
+            --namespace linkerd-viz
+    fi
     kubectl delete secret generic tap-k8s-tls --namespace=linkerd-viz --ignore-not-found
     kubectl create secret tls tap-k8s-tls \
         --namespace=linkerd-viz \
@@ -463,7 +493,7 @@ function install_linkerd_viz {
         --key=./certificates/tap.key
 
     kubectl rollout restart deploy -n linkerd-viz tap
-
+    kubectl rollout restart deploy -n linkerd-viz tap-injector 
 }
 
 function install_cert_manager {
@@ -481,18 +511,25 @@ function install_cert_manager {
         --namespace cert-manager
     if [ $LINKERD_ENABLED == true ]; then
         echo "Configuring Cert Manager for Linkerd..."
-
         kubectl delete secret linkerd-trust-anchor --namespace=linkerd --ignore-not-found
         kubectl create secret tls linkerd-trust-anchor \
             --cert=./certificates/ca.crt \
             --key=./certificates/ca.key \
-            --namespace=linkerd
-        
+            --namespace=linkerd   
         kubectl delete -f ./manifests/linkerd/cert-manager-issuer.yaml --ignore-not-found
-        kubectl delete -f ./manifests/linkerd/cert-manager-issuer-cert.yaml --ignore-not-found
-
+        kubectl delete -f ./manifests/linkerd/cert-manager-cert.yaml --ignore-not-found
         kubectl apply -f ./manifests/linkerd/cert-manager-issuer.yaml
-        kubectl apply -f ./manifests/linkerd/cert-manager-issuer-cert.yaml
+        kubectl apply -f ./manifests/linkerd/cert-manager-cert.yaml
+    fi
+    if [ $LINKERD_VIZ_ENABLED == true ]; then
+        echo "Configuring Cert Manager for Linkerd Viz..."
+        kubectl delete secret linkerd-trust-anchor --namespace=linkerd-viz --ignore-not-found
+        kubectl create secret tls linkerd-trust-anchor \
+            --cert=./certificates/ca.crt \
+            --key=./certificates/ca.key \
+            --namespace=linkerd-viz   
+        kubectl delete -f ./manifests/linkerd/cert-manager-cert-viz.yaml --ignore-not-found
+        kubectl apply -f ./manifests/linkerd/cert-manager-cert-viz.yaml
     fi
 }
 
@@ -688,8 +725,8 @@ for i in $(seq 1 $MINIKUBE_CLUSTERS); do
     add_topology_label_to_nodes
     add_agentpool_label_to_nodes
     install_linkerd
-    install_cert_manager 
     install_linkerd_viz
+    install_cert_manager
     install_nginx
     install_application
     inject_linkerd
