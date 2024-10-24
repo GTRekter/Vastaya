@@ -57,20 +57,20 @@ MINIKUBE_MEMORY=12288
 MINIKUBE_CLUSTERS=1
 MINIKUBE_CLEANUP=false
 LINKERD_ENABLED=true
-LINKERD_INJECT=false
+LINKERD_INJECT=true
 LINKERD_ENTERPRISE=true
-LINKERD_ENTERPRISE_OPERATOR=false
-LINKERD_HTTP_ROUTE_ENABLED=false
-LINKERD_CLOUD_ENABLED=false
-LINKERD_VIZ_ENABLED=true
+LINKERD_ENTERPRISE_OPERATOR=false 
+LINKERD_HTTP_ROUTE_ENABLED=true
+LINKERD_CLOUD_ENABLED=false # To use Buoyant Cloud it is required to use the Operator (the Buoyant Cloud Agent manifest is present only in the Operator)
+LINKERD_VIZ_ENABLED=false
 STEP_ENABLED=true
 PROMETHEUS_ENABLED=false
 GRAFANA_ENABLED=false
-NGINX_ENABLED=false
-CERT_MANAGER_ENABLED=true
+NGINX_ENABLED=true
+CERT_MANAGER_ENABLED=false
 DATADOG_ENABLED=false
-APP_IMAGE_BUILD_ENABLED=false
-APP_IMAGE_DEPLOY_ENABLED=false
+APP_IMAGE_BUILD_ENABLED=true
+APP_IMAGE_DEPLOY_ENABLED=true
 APP_IMAGE_REGISTRY_LOGIN=false
 APP_IMAGE_REGISTRY_SERVER=localhost:5000
 APP_TRAFFIC_ENABLED=false
@@ -275,6 +275,10 @@ function install_linkerd {
             echo "Linkerd Enterprise license not found. Please provide the license."
             exit 1
         fi
+        if [ $LINKERD_ENTERPRISE_OPERATOR == false ] && [ $LINKERD_CLOUD_ENABLED == true ]; then
+            echo "Linkerd Cloud is supported only with the Linkerd Enterprise Operator. Please enable the operator."
+            exit 1
+        fi
         curl --proto '=https' --tlsv1.2 -sSfL https://enterprise.buoyant.io/install | sh
         export PATH=$HOME/.linkerd2/bin:$PATH
         helm repo add linkerd-buoyant https://helm.buoyant.cloud
@@ -285,58 +289,24 @@ function install_linkerd {
                 --namespace linkerd \
                 --create-namespace
             if [ $CERT_MANAGER_ENABLED == false ]; then 
-                if [ $LINKERD_CLOUD_ENABLED == false ]; then
-                    echo "Installing Linkerd Enterprise Control Plane with issuing certificates and without Linkerd Cloud..."
-                    helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                        --values ./helm/linkerd-enterprise/values.yaml \
-                        --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                        --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
-                        --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
-                        --set buoyantCloudEnabled=false \
-                        --set license=$BUOYANT_LICENSE \
-                        --namespace linkerd \
-                        --create-namespace 
-                else 
-                    # TODO: Not installing the cloud agent :(
-                    echo "Installing Linkerd Enterprise Control Plane with issuing certificates and Linkerd Cloud..."
-                    helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                        --values ./helm/linkerd-enterprise/values.yaml \
-                        --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                        --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
-                        --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
-                        --set buoyantCloudEnabled=true \
-                        --set metadata.agentName=Minikube \
-                        --set license=$BUOYANT_LICENSE \
-                        --set api.clientID=$API_CLIENT_ID \
-                        --set api.clientSecret=$API_CLIENT_SECRET \
-                        --namespace linkerd \
-                        --create-namespace 
-                fi
+                echo "Installing Linkerd Enterprise Control Plane with issuing certificates and Linkerd Cloud..."
+                helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                    --values ./helm/linkerd-enterprise/values.yaml \
+                    --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                    --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
+                    --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
+                    --set license=$BUOYANT_LICENSE \
+                    --namespace linkerd \
+                    --create-namespace 
             else 
-                if [ $LINKERD_CLOUD_ENABLED == false ]; then
-                    echo "Installing Linkerd Enterprise Control Plane without issuing certificates and without Linkerd Cloud..."
-                    helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                        --values ./helm/linkerd-enterprise/values.yaml \
-                        --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                        --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
-                        --set buoyantCloudEnabled=false \
-                        --set license=$BUOYANT_LICENSE \
-                        --namespace linkerd \
-                        --create-namespace 
-                else 
-                    echo "Installing Linkerd Enterprise Control Plane without issuing certificates and Linkerd Cloud..."
-                    helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                        --values ./helm/linkerd-enterprise/values.yaml \
-                        --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                        --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
-                        --set buoyantCloudEnabled=true \
-                        --set metadata.agentName=Minikube \
-                        --set license=$BUOYANT_LICENSE \
-                        --set api.clientID=$API_CLIENT_ID \
-                        --set api.clientSecret=$API_CLIENT_SECRET \
-                        --namespace linkerd \
-                        --create-namespace 
-                fi
+                echo "Installing Linkerd Enterprise Control Plane without issuing certificates and without Linkerd Cloud..."
+                helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+                    --values ./helm/linkerd-enterprise/values.yaml \
+                    --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
+                    --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
+                    --set license=$BUOYANT_LICENSE \
+                    --namespace linkerd \
+                    --create-namespace 
             fi
         else 
             if [ $LINKERD_CLOUD_ENABLED == false ]; then
@@ -365,7 +335,20 @@ function install_linkerd {
                 --from-file=tls.key=./certificates/issuer.key
             CERT_CONTENT=$(cat ./certificates/ca.crt | sed 's/^/          /')
             awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found -f - 
-            sleep 5 # TODO: Find a better way to wait for the deletion of the control plane
+            echo "Waiting for Linkerd Operator to be ready..."
+            kubectl wait --for=condition=available \
+                --timeout=300s deploy \
+                --namespace=linkerd-buoyant \
+                linkerd-control-plane-operator 
+            kubectl wait --for=condition=available \
+                --timeout=300s deploy \
+                --namespace=linkerd-buoyant \
+                linkerd-control-plane-validator
+            kubectl wait --for=condition=available \
+                --timeout=300s deploy \
+                --namespace=linkerd-buoyant \
+                linkerd-data-plane-operator
+            echo "Waiting for application deployments to be ready..."
             awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl apply -f -
         fi
     else

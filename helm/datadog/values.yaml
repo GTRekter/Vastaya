@@ -11,7 +11,9 @@ datadog:
   kubeScheduler:
     enabled: false
   kubelet:
+    enabled: true
     tlsVerify: false
+  collectEvents: true
   logs:
     enabled: true
     containerCollectAll: true
@@ -30,19 +32,15 @@ datadog:
   etcd:
     enabled: false
   confd:
-    linkerd.yaml: |
-      init_config:
-    # linkerd.yaml: |-
-    #   cluster_check: false
-    #   init_config:
-    #   instances:
-    #   - openmetrics_endpoint: http://%%host%%:4191/metrics
-
 clusterAgent:
+  replicas: 2
+  createPodDisruptionBudget: true
   enabled: true
   confd:
     linkerd.yaml: |-
-      cluster_check: false
+      cluster_check: true
+      ad_identifiers:
+        - proxy
       init_config:
       instances:
-      - openmetrics_endpoint: http://%%host%%:4191/metrics
+        - openmetrics_endpoint: http://prometheus-server.monitoring.svc.cluster.local:80/metrics

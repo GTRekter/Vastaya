@@ -1,3 +1,4 @@
 # Ignore all .pem files used for certificates
 /certificates
+# Ignore all secrets values
 /scripts/settings.sh
