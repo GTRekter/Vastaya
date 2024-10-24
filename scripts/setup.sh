@@ -22,27 +22,28 @@ source "$(dirname "$0")/settings.sh"
 # 6. MINIKUBE_MEMORY              : (optional) Memory in MB to allocate to the Minikube cluster. Default is 12288.
 # 7. MINIKUBE_CLUSTERS            : (optional) Number of Minikube clusters to create. Default is 2.
 # 8. MINIKUBE_CLEANUP             : (optional) Flag to enable or disable Minikube cleanup. Default is false.
-# 9. BUOYANT_LICENSE              : License key for Linkerd Enterprise installation.
-# 10. LINKERD_ENABLED             : (optional) Flag to enable or disable Linkerd installation. Default is false.
-# 11. LINKERD_INJECT              : (optional) Enables Linkerd proxy injection into application deployments. Default is false.
-# 12. LINKERD_ENTERPRISE          : (optional) Flag to enable Linkerd Enterprise installation. Default is false.
-# 13. LINKERD_ENTERPRISE_OPERATOR : (optional) Controls whether to install the Linkerd Enterprise operator (work in progress). Default is false.
-# 14. LINKERD_HTTP_ROUTE_ENABLED  : (optional) Enables HTTP route simulation for Linkerd. Default is false.
-# 15. LINKERD_CLOUD_ENABLED       : (optional) Enables Linkerd Cloud dashboard installation. Default is false.
-# 16. LINKERD_VIZ_ENABLED         : (optional) Enables Linkerd Viz dashboard installation. Default is false.
-# 17. STEP_ENABLED                : (optional) Enables certificate generation using `step` CLI. Default is false.
-# 18. PROMETHEUS_ENABLED          : (optional) Flag to enable Prometheus installation. Default is false.
-# 19. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
-# 20. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
-# 21. CERT_MANAGER_ENABLED        : (optional) Flag to enable Cert Manager installation. If linkerd is enable, it will configure Linkerd certificates to auto-rotate. Default is false.
-# 22. DATADOG_ENABLED             : (optional) Flag to enable Datadog installation for monitoring. Default is false.
-# 23. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
-# 24. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
-# 25. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
-# 26. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is empty. 
-# 27. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 28. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
-# 29. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
+# 9. NCLOUD_ENABLED               : (optional) Flag to enable or disable NCloud infrastructure setup. Default is false.
+# 10. BUOYANT_LICENSE              : License key for Linkerd Enterprise installation.
+# 11. LINKERD_ENABLED             : (optional) Flag to enable or disable Linkerd installation. Default is false.
+# 12. LINKERD_INJECT              : (optional) Enables Linkerd proxy injection into application deployments. Default is false.
+# 13. LINKERD_ENTERPRISE          : (optional) Flag to enable Linkerd Enterprise installation. Default is false.
+# 14. LINKERD_ENTERPRISE_OPERATOR : (optional) Controls whether to install the Linkerd Enterprise operator (work in progress). Default is false.
+# 15. LINKERD_HTTP_ROUTE_ENABLED  : (optional) Enables HTTP route simulation for Linkerd. Default is false.
+# 16. LINKERD_CLOUD_ENABLED       : (optional) Enables Linkerd Cloud dashboard installation. Default is false.
+# 17. LINKERD_VIZ_ENABLED         : (optional) Enables Linkerd Viz dashboard installation. Default is false.
+# 18. STEP_ENABLED                : (optional) Enables certificate generation using `step` CLI. Default is false.
+# 19. PROMETHEUS_ENABLED          : (optional) Flag to enable Prometheus installation. Default is false.
+# 20. GRAFANA_ENABLED             : (optional) Enables Grafana installation for monitoring. Default is false.
+# 21. NGINX_ENABLED               : (optional) Flag to enable NGINX Ingress controller installation. Default is false.
+# 22. CERT_MANAGER_ENABLED        : (optional) Flag to enable Cert Manager installation. If linkerd is enable, it will configure Linkerd certificates to auto-rotate. Default is false.
+# 23. DATADOG_ENABLED             : (optional) Flag to enable Datadog installation for monitoring. Default is false.
+# 24. APP_IMAGE_BUILD_ENABLED     : (optional) Controls whether to build the Docker images for the application. Default is false.
+# 25. APP_IMAGE_DEPLOY_ENABLED    : (optional) Enables the deployment of application images to the cluster. Default is false.
+# 26. APP_IMAGE_REGISTRY_LOGIN    : (optional) Indicates whether to log into the Docker registry or Azure Container Registry for pushing images. Default is false.
+# 27. APP_IMAGE_REGISTRY_SERVER   : (optional) Docker registry server to which the application images will be pushed. Default is empty. 
+# 28. APP_IMAGE_REGISTRY_USERNAME : (optional) Username for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 29. APP_IMAGE_REGISTRY_PASSWORD : (optional) Password for the Docker registry. Required if APP_IMAGE_REGISTRY_LOGIN is true.
+# 30. APP_TRAFFIC_ENABLED         : (optional) Flag to enable traffic simulation for the application. Default is false.
 
 # ---------------------------------------------------------
 # Configuration
@@ -56,19 +57,20 @@ MINIKUBE_CPUS=8
 MINIKUBE_MEMORY=12288
 MINIKUBE_CLUSTERS=1
 MINIKUBE_CLEANUP=false
+NCLOUD_ENABLED=false
 LINKERD_ENABLED=true
 LINKERD_INJECT=true
 LINKERD_ENTERPRISE=true
 LINKERD_ENTERPRISE_OPERATOR=false 
-LINKERD_HTTP_ROUTE_ENABLED=true
+LINKERD_HTTP_ROUTE_ENABLED=false
 LINKERD_CLOUD_ENABLED=false # To use Buoyant Cloud it is required to use the Operator (the Buoyant Cloud Agent manifest is present only in the Operator)
 LINKERD_VIZ_ENABLED=false
 STEP_ENABLED=true
-PROMETHEUS_ENABLED=false
+PROMETHEUS_ENABLED=true
 GRAFANA_ENABLED=false
 NGINX_ENABLED=true
 CERT_MANAGER_ENABLED=false
-DATADOG_ENABLED=false
+DATADOG_ENABLED=true
 APP_IMAGE_BUILD_ENABLED=true
 APP_IMAGE_DEPLOY_ENABLED=true
 APP_IMAGE_REGISTRY_LOGIN=false
@@ -85,6 +87,10 @@ function check_tools {
     fi
     if ! command -v helm &> /dev/null; then
         echo "Helm is not installed. Please install Helm."
+        exit 1
+    fi
+    if ! command -v terraform &> /dev/null; then
+        echo "Terraform is not installed. Please install Terraform."
         exit 1
     fi
     if [ $MINIKUBE_ENABLED == true ] && ! command -v minikube &> /dev/null; then
@@ -162,6 +168,20 @@ function start_minikube {
     else 
         eval $(minikube docker-env)
     fi
+}
+
+function deploy_ncloud {
+    if [ $NCLOUD_ENABLED == false ]; then
+        echo "NCloud infrastructure is not enabled. Skipping NCloud setup."
+        return
+    fi
+    echo "Initializing Terraform..."
+    terraform init ./terraform/ncloud
+    echo "Applying Terraform configuration..."
+    terraform apply -auto-approve ./terraform/ncloud \
+        --var "access_key=$NCLOUD_ACCESS_KEY" \
+        --var "secret_key=$NCLOUD_SECRET_KEY" \
+        --var "region=$NCLOUD_REGION"
 }
 
 function update_docker_insicure_registries {
@@ -613,6 +633,7 @@ function inject_linkerd {
             linkerd-identity
 
         echo "Waiting for application deployments to be ready..."
+
         kubectl wait deploy --for=condition=available \
             --timeout=300s \
             --namespace=vastaya \
@@ -631,10 +652,10 @@ function inject_linkerd {
             comments-vastaya-dplmt 
 
         echo "Injecting Linkerd into the application deployments..."
-        kubectl get deploy application-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
-        kubectl get deploy projects-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
-        kubectl get deploy tasks-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
-        kubectl get deploy comments-vastaya-dplmt -n vastaya -o yaml | linkerd inject - | kubectl apply -f -
+        kubectl annotate deploy application-vastaya-dplmt -n vastaya linkerd.io/injected=updated --overwrite
+        kubectl annotate deploy projects-vastaya-dplmt -n vastaya linkerd.io/injected=updated --overwrite
+        kubectl annotate deploy tasks-vastaya-dplmt -n vastaya linkerd.io/injected=updated --overwrite
+        kubectl annotate deploy comments-vastaya-dplmt -n vastaya linkerd.io/injected=updated --overwrite
 
         echo "Restarting the application deployments..."
         kubectl rollout restart deploy -n vastaya application-vastaya-dplmt
@@ -696,6 +717,7 @@ function cleanup {
 
 check_tools
 start_minikube
+deploy_ncloud
 generate_certificates
 build_application
 for i in $(seq 1 $MINIKUBE_CLUSTERS); do

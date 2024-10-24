@@ -3,44 +3,49 @@ datadog:
   clusterName: raccoon
   site: "ap1.datadoghq.com"
   apiKeyExistingSecret: "datadog-secret"
-  kubeStateMetricsEnabled: false
-  kubeStateMetricsCore:
-    enabled: true
-  kubeControllerManager:
-    enabled: false
-  kubeScheduler:
-    enabled: false
+  # kubeStateMetricsEnabled: false
+  # kubeStateMetricsCore:
+  #   enabled: false
+  # kubeControllerManager:
+  #   enabled: false
+  # kubeScheduler:
+  #   enabled: false
   kubelet:
-    enabled: true
+    # enabled: true
     tlsVerify: false
   collectEvents: true
   logs:
     enabled: true
     containerCollectAll: true
-  securityAgent:
-    compliance:
-      enabled: false
-    runtime:
-      enabled: false
-  processAgent:
-    enabled: false
-  orchestratorExplorer:
-    enabled: false
-  helmCheck:
+  # securityAgent:
+  #   compliance:
+  #     enabled: false
+  #   runtime:
+  #     enabled: false
+  # processAgent:
+  #   enabled: false
+  # orchestratorExplorer:
+  #   enabled: false
+  # helmCheck:
+  #   enabled: true
+  #   collectEvents: true
+  # etcd:
+  #   enabled: false
+  # confd:
+  clusterChecks:
     enabled: true
-    collectEvents: true
-  etcd:
-    enabled: false
-  confd:
 clusterAgent:
   replicas: 2
   createPodDisruptionBudget: true
   enabled: true
   confd:
     linkerd.yaml: |-
-      cluster_check: true
-      ad_identifiers:
-        - proxy
+      # ad_identifiers:
+      #   - linkerd-proxy
+      #   - application-vastaya-cntr
+      #   - comments-vastaya-cntr
+      #   - projects-vastaya-cntr
+      #   - tasks-vastaya-cntr
       init_config:
       instances:
         - openmetrics_endpoint: http://prometheus-server.monitoring.svc.cluster.local:80/metrics
