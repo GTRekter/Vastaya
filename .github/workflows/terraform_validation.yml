@@ -47,27 +47,32 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
         with:
-          terraform_version: 1.5.0 # Use your required version
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
 
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Install Infracost CLI
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
-          echo "${{ secrets.INFRACOST_API_KEY }}" | infracost auth login
-
-      - name: Generate Infracost JSON
-        id: infracost
-        run: |
-          infracost breakdown --path . --format json --out-file infracost_output.json
-
-      - name: Post Infracost Comment
-        uses: infracost/infracost-gh-action@v2
+      - name: Checkout base branch
+        uses: actions/checkout@v4
         with:
-          path: infracost_output.json
-          post_condition: always 
-          behavior: update
+          ref: '${{ github.event.pull_request.base.ref }}'
+
+      - name: Generate Infracost cost estimate baseline
+        run: |
+          infracost breakdown --path=. --format=json --out-file=/tmp/infracost-base.json
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: Generate Infracost diff
+        run: |
+          infracost diff --path=. --format=json --compare-to=/tmp/infracost-base.json --out-file=/tmp/infracost.json
+
+      - name: Post Infracost comment
+        run: |
+            infracost comment github --path=/tmp/infracost.json \
+                                     --repo=$GITHUB_REPOSITORY \
+                                     --github-token=${{ github.token }} \
+                                     --pull-request=${{ github.event.pull_request.number }} \
+                                     --behavior=update
+
