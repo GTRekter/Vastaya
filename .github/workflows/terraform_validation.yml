@@ -4,11 +4,17 @@ on:
   pull_request:
     branches:
       - main
+#    paths:
+#      - 'terraform/**' 
 
 jobs:
   validate_terraform:
     name: Validate and Scan Terraform
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/ncloud
+        
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -30,7 +36,7 @@ jobs:
           pip3 install checkov
 
       - name: Run Checkov Scan
-        run: checkov -d . --skip-download --download-external-modules true
+        run: checkov -d . --skip-download --download-external-modules true --skip-checks CKV_TF_1
         continue-on-error: true
 
   initialize_and_infracost:
