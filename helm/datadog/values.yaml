@@ -40,12 +40,26 @@ clusterAgent:
   enabled: true
   confd:
     linkerd.yaml: |-
-      # ad_identifiers:
-      #   - linkerd-proxy
+      cluster_check: true
+      # limit the container
+      ad_identifiers:
+        - linkerd-proxy
       #   - application-vastaya-cntr
       #   - comments-vastaya-cntr
       #   - projects-vastaya-cntr
       #   - tasks-vastaya-cntr
       init_config:
       instances:
-        - openmetrics_endpoint: http://prometheus-server.monitoring.svc.cluster.local:80/metrics
+        - openmetrics_endpoint: http://%%host%%:4191/metrics
+        extra_metrics:
+        - .+:
+          type: gauge
+      # ad_identifiers:
+      #   - linkerd-proxy
+      #   - application-vastaya-cntr
+      #   - comments-vastaya-cntr
+      #   - projects-vastaya-cntr
+      #   - tasks-vastaya-cntr
+      # init_config:
+      # instances:
+      #   - openmetrics_endpoint: http://%%host%%:4191/metrics
