@@ -14,7 +14,10 @@ jobs:
     defaults:
       run:
         working-directory: terraform/ncloud
-        
+    permissions:
+      contents: read
+      pull-requests: write
+      
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
