@@ -36,7 +36,7 @@ jobs:
           pip3 install checkov
 
       - name: Run Checkov Scan
-        run: checkov -d . --skip-download --download-external-modules true --skip-checks CKV_TF_1
+        run: checkov -d . --skip-download --download-external-modules true --skip-check CKV_TF_1
         continue-on-error: true
 
   initialize_and_infracost:
