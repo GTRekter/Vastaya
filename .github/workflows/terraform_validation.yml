@@ -4,11 +4,17 @@ on:
   pull_request:
     branches:
       - main
+#    paths:
+#      - 'terraform/**' 
 
 jobs:
   validate_terraform:
     name: Validate and Scan Terraform
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/ncloud
+        
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
