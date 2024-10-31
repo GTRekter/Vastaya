@@ -1,0 +1,67 @@
+name: Terraform Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate_terraform:
+    name: Validate and Scan Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0 # Use your required version
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Install Checkov
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install checkov
+
+      - name: Run Checkov Scan
+        run: checkov -d . --skip-download
+        continue-on-error: true
+
+  initialize_and_infracost:
+    name: Initialize and Cost Estimate
+    runs-on: ubuntu-latest
+    needs: validate_terraform
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0 # Use your required version
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Install Infracost CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+          echo "${{ secrets.INFRACOST_API_KEY }}" | infracost auth login
+
+      - name: Generate Infracost JSON
+        id: infracost
+        run: |
+          infracost breakdown --path . --format json --out-file infracost_output.json
+
+      - name: Post Infracost Comment
+        uses: infracost/infracost-gh-action@v2
+        with:
+          path: infracost_output.json
+          post_condition: always 
+          behavior: update
