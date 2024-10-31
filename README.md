@@ -250,11 +250,6 @@ Or even get real-time, detailed, request-level information, similar to packet in
 linkerd viz tap ns vastaya
 ```
 
-
-
-
-
-
 #### Canary
 The API project use the HTTP Routes provied by API Gateway and supported by Linekrd to direct the traffic to the image with tag canary running in the related deployemtn and server by the service with suffix canary.
 
