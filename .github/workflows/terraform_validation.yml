@@ -30,7 +30,7 @@ jobs:
           pip3 install checkov
 
       - name: Run Checkov Scan
-        run: checkov -d . --skip-download
+        run: checkov -d . --skip-download --download-external-modules
         continue-on-error: true
 
   initialize_and_infracost:
