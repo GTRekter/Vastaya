@@ -10,6 +10,7 @@ The application architecture is composed of the following components:
 - **Namespace:** All resources will be deployed onto the same namespace.
 
 
+
 **Note:** Since the React.JS is a client application, API endpoints must be accessed using the host specified in their Ingress configurations. The APIs will not be accessible via internal cluster DNS resolution.
 
 **NodeJS API (Projects):** This API manages project data in memory and supports CRUD (Create, Read, Update, Delete) operations. It also interacts with the internal endpoint of the Tasks service to generate reports for specific projects. Deployment will be managed via a shared Helm chart and will include:
