@@ -50,7 +50,16 @@ service:
 deployment:
   annotations: {}
   replicaCount: 3
-  podAnnotations: {}
+  # podAnnotations: {}
+  podAnnotations: 
+    # config.alpha.linkerd.io/proxy-enable-native-sidecar: "true"
+    ad.datadoghq.com/tasks-vastaya-cntr.checks: |
+      {
+        "linkerd": {
+          "init_config": {},
+          "instances": [{"openmetrics_endpoint": "http://%%host%%:4191/metrics"}]
+        }
+      }   
   podLabels: {}
   imagePullSecrets: []
   podSecurityContext: {}

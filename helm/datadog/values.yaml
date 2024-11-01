@@ -38,28 +38,19 @@ clusterAgent:
   replicas: 2
   createPodDisruptionBudget: true
   enabled: true
-  confd:
-    linkerd.yaml: |-
-      cluster_check: true
-      # limit the container
-      ad_identifiers:
-        - linkerd-proxy
-      #   - application-vastaya-cntr
-      #   - comments-vastaya-cntr
-      #   - projects-vastaya-cntr
-      #   - tasks-vastaya-cntr
-      init_config:
-      instances:
-        - openmetrics_endpoint: http://%%host%%:4191/metrics
-        extra_metrics:
-        - .+:
-          type: gauge
-      # ad_identifiers:
-      #   - linkerd-proxy
-      #   - application-vastaya-cntr
-      #   - comments-vastaya-cntr
-      #   - projects-vastaya-cntr
-      #   - tasks-vastaya-cntr
-      # init_config:
-      # instances:
-      #   - openmetrics_endpoint: http://%%host%%:4191/metrics
+  # confd:
+  #   linkerd.yaml: |-
+  #     cluster_check: true
+  #     # ad_identifiers:
+  #     #   - linkerd-proxy
+  #     #   - application-vastaya-cntr
+  #     #   - comments-vastaya-cntr
+  #     #   - projects-vastaya-cntr
+  #     #   - tasks-vastaya-cntr
+  #     init_config:
+  #     instances:
+  #       - openmetrics_endpoint: http://%%host%%:4191/metrics
+  #     extra_metrics:
+  #     - ^network_(ingress|egress)_.+
+  #     - .+:
+  #         type: gauge
