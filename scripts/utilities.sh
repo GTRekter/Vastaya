@@ -35,10 +35,12 @@ function log_message() {
 function isLinkerdEnterprise() {
     local VERSION=$1
     if ! command -v jq &> /dev/null; then
-        echo "jq is required for this script to run. Please install jq."
         exit 1
     fi
     local VERSIONS=$(curl -s "https://artifacthub.io/api/v1/packages/helm/linkerd-buoyant/linkerd-enterprise-control-plane" | jq -r '.available_versions[].version')
+    if [ $? -ne 0 ] || [ -z "$VERSIONS" ]; then
+        return 1
+    fi
     if echo "$VERSIONS" | grep -q "^$VERSION$"; then
         return 0 
     else
