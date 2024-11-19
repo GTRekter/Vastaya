@@ -288,15 +288,6 @@ function install_linkerd {
                 --create-namespace
             if [ $CERT_MANAGER_ENABLED == false ]; then 
                 log_message "INFO" "Installing Linkerd Enterprise Control Plane with issuing certificates and Linkerd Cloud..."
-                # helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
-                #     --version $LINKERD_VERSION \
-                #     --values ./helm/linkerd-enterprise/values.yaml \
-                #     --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
-                #     --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
-                #     --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
-                #     --set license=$BUOYANT_LICENSE \
-                #     --namespace linkerd \
-                #     --create-namespace 
                 helm upgrade --install linkerd-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
                     --version $LINKERD_VERSION \
                     --values ./helm/linkerd-enterprise/values.yaml \
@@ -343,7 +334,7 @@ function install_linkerd {
                 --from-file=tls.crt=./certificates/issuer.crt \
                 --from-file=tls.key=./certificates/issuer.key
             CERT_CONTENT=$(cat ./certificates/ca.crt | sed 's/^/          /')
-            awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found -f - 
+            awk -v version="enterprise-$LINKERD_VERSION" -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_VERSION/, version); gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found -f - 
             log_message "INFO" "Waiting for Linkerd Operator to be ready..."
             kubectl wait --for=condition=available \
                 --timeout=300s deploy \
@@ -358,7 +349,7 @@ function install_linkerd {
                 --namespace=linkerd-buoyant \
                 linkerd-data-plane-operator
             log_message "INFO" "Waiting for application deployments to be ready..."
-            awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl apply -f -
+            awk -v version="enterprise-$LINKERD_VERSION" -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_VERSION/, version); gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl apply -f -
         fi
     else
         log_message "INFO" "Installing Linkerd..."
@@ -633,6 +624,20 @@ function install_argo {
         --namespace argo
     log_message "SUCCESS" "Argo installed."
 }
+function install_multicluster {
+    if [ $LINKERD_MULTICLUSTER_ENABLED == false ]; then
+        log_message "INFO" "Multicluster is not enabled. Skipping Multicluster setup."
+        uninstall_helm_release multicluster
+        return
+    fi
+    helm repo add linkerd https://charts.linkerd.io/edge
+    helm repo update
+    helm upgrade --install multicluster linkerd/linkerd-multicluster \
+        --values ./helm/linkerd-multicluster/values.yaml \
+        --create-namespace \
+        --namespace linkerd-multicluster
+    log_message "SUCCESS" "Multicluster installed."
+}
 # ---------------------------------------------------------
 # Services Configuration
 # ---------------------------------------------------------
@@ -698,6 +703,22 @@ function inject_linkerd {
         fi
     done
     log_message "SUCCESS" "Linkerd injected into the application deployments."
+}
+function link_clusters {
+    if [ $LINKERD_MULTICLUSTER_ENABLED == false ]; then
+        log_message "INFO" "Multicluster is not enabled. Skipping Multicluster setup."
+        return
+    fi
+    log_message "INFO" "Linking the clusters..."
+    for i in $(seq 1 "$MINIKUBE_CLUSTERS"); do
+        minikube profile "cluster-$i"
+        for j in $(seq 1 "$MINIKUBE_CLUSTERS"); do
+            if [ "$i" -ne "$j" ]; then
+                linkerd multicluster link --context="cluster-$i" --cluster-name="cluster-$i" | kubectl --context="cluster-$j" apply -f -
+            fi
+        done
+    done
+    log_message "SUCCESS" "Clusters linked."
 }
 # ---------------------------------------------------------
 # Simulations Setup
@@ -770,7 +791,9 @@ for i in $(seq 1 $MINIKUBE_CLUSTERS); do
     install_nginx
     install_application
     inject_linkerd
+    install_multicluster
 done
+link_clusters
 install_argo
 install_datadog
 install_prometheus # Work in progress

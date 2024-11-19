@@ -32,6 +32,8 @@ ingress:
 # Service values
 # ==============================================================================
 service:
+  annotations: 
+    mirror.linkerd.io/exported: "true"
   type: ClusterIP
   ports:
     - port: 80

@@ -56,13 +56,18 @@ deployment:
   replicaCount: 1
   podAnnotations: 
     # config.alpha.linkerd.io/proxy-enable-native-sidecar: "true"
-    ad.datadoghq.com/projects-vastaya-cntr.checks: |
+    ad.datadoghq.com/tasks-vastaya-cntr.checks: |
       {
         "linkerd": {
           "init_config": {},
-          "instances": [{"openmetrics_endpoint": "http://%%host%%:4191/metrics"}]
+          "instances": [
+            {
+              "openmetrics_endpoint": "http://%%host%%:4191/metrics",
+              "extra_metrics": [{"outbound_http_route_request_duration_seconds_bucket":"outbound_http_route_request_duration_seconds_bucket"}]
+            }
+          ]
         }
-      }    
+      }   
   podLabels: {}
   imagePullSecrets: []
   podSecurityContext: {}
@@ -77,7 +82,7 @@ deployment:
   ]
   nodeSelector: {}
   tolerations: []
-  affinity: {}
+  # affinity: {}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

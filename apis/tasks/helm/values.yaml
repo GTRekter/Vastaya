@@ -57,7 +57,12 @@ deployment:
       {
         "linkerd": {
           "init_config": {},
-          "instances": [{"openmetrics_endpoint": "http://%%host%%:4191/metrics"}]
+          "instances": [
+            {
+              "openmetrics_endpoint": "http://%%host%%:4191/metrics",
+              "extra_metrics": [{"outbound_http_route_request_duration_seconds_bucket":"outbound_http_route_request_duration_seconds_bucket"}]
+            }
+          ]
         }
       }   
   podLabels: {}
@@ -74,16 +79,16 @@ deployment:
   ]
   nodeSelector: {}
   tolerations: []
-  affinity: {}
-  # affinity:
-  #   nodeAffinity:
-  #     requiredDuringSchedulingIgnoredDuringExecution:
-  #       nodeSelectorTerms:
-  #       - matchExpressions:
-  #         - key: agentpool
-  #           operator: In
-  #           values:
-  #           - application
+  # affinity: {}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: agentpool
+            operator: In
+            values:
+            - application
 # ==============================================================================
 # Container values
 # ==============================================================================
