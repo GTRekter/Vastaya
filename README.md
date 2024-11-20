@@ -250,11 +250,6 @@ Or even get real-time, detailed, request-level information, similar to packet in
 linkerd viz tap ns vastaya
 ```
 
-
-
-
-
-
 #### Canary
 The API project use the HTTP Routes provied by API Gateway and supported by Linekrd to direct the traffic to the image with tag canary running in the related deployemtn and server by the service with suffix canary.
 
@@ -266,64 +261,3 @@ To integrate Linkerd with Nginx
 
 Linkerd Policy HTTPRoute was created to allow users usering versions previous 2.14, but with 2.14 we can use gateway.networking.k8s.io/v1beta1 HTTRoutes.
 
-
-
-
-
-
-
-## Database
-In this project, we will deploy a database outside the cluster. To do so, in a new terminal (so that it won't point to the registry inside the cluster) exeute the following:
-```
-docker run -d --name mysql -e MYSQL_ROOT_PASSWORD=secretPassword -e MYSQL_DATABASE=vastaya -p 3306:3306  mysql:8.0
-```
-
-<!-- # Prerequisites
-**MySQL Operator**
-The documentation is available at the following [link](https://dev.mysql.com/doc/mysql-operator/en/mysql-operator-innodbcluster.html)
-```
-helm repo add mysql-operator https://mysql.github.io/mysql-operator
-helm repo update
-helm install mysql-operator mysql-operator/mysql-operator -n mysql-operator --values values.yaml --create-namespace
-helm install mysql-cluster mysql-operator/mysql-innodbcluster --set tls.useSelfSigned=true --values values.yaml -n default
-```
-# Create test DB
-```
- kubectl run --rm -it myshell --image=container-registry.oracle.com/mysql/community-operator -- mysqlsh
-If you don't see a command prompt, try pressing enter.
-
- MySQL  SQL > \connect root@mysql-cluster
-Creating a session to 'root@mysql-cluster'
-Please provide the password for 'root@mysql-cluster': ******
-Save password for 'root@mysql-cluster'? [Y]es/[N]o/Ne[v]er (default No): yes
-Fetching global names for auto-completion... Press ^C to stop.
-Your MySQL connection id is 0
-Server version: 9.0.1 MySQL Community Server - GPL
-No default schema selected; type \use <schema> to set one.
- MySQL  mysql-cluster:3306 ssl  SQL > CREATE DATABASE testdb;
-  MySQL  mysql-cluster:3306 ssl  SQL > CREATE TABLE IF NOT EXISTS users (
-                                   ->   id INT AUTO_INCREMENT PRIMARY KEY,
-                                   ->   name VARCHAR(255) NOT NULL,
-                                   ->   email VARCHAR(255) NOT NULL UNIQUE
-                                   -> );
-ERROR: 1046 (3D000): No database selected
- MySQL  mysql-cluster:3306 ssl  SQL > USE testdb;
-Default schema set to `testdb`.
-Fetching global names, object names from `testdb` for auto-completion... Press ^C to stop.
- MySQL  mysql-cluster:3306 ssl  testdb  SQL > CREATE TABLE IF NOT EXISTS users (
-                                           ->   id INT AUTO_INCREMENT PRIMARY KEY,
-                                           ->   name VARCHAR(255) NOT NULL,
-                                           ->   email VARCHAR(255) NOT NULL UNIQUE
-                                           -> );
-Query OK, 0 rows affected (0.0515 sec)
- MySQL  mysql-cluster:3306 ssl  testdb  SQL > INSERT INTO users (name, email) VALUES ('John Doe', 'johndoe@example.com');
-Query OK, 1 row affected (0.0088 sec)
- MySQL  mysql-cluster:3306 ssl  testdb  SQL > SELECT * FROM users;
-+----+----------+---------------------+
-| id | name     | email               |
-+----+----------+---------------------+
-|  1 | John Doe | johndoe@example.com |
-+----+----------+---------------------+
-1 row in set (0.0007 sec)
- MySQL  mysql-cluster:3306 ssl  testdb  SQL > quit -->
-```
