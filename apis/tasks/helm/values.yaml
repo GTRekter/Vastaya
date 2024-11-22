@@ -49,7 +49,7 @@ service:
 # ==============================================================================
 deployment:
   annotations: {}
-  replicaCount: 3
+  replicaCount: 1
   # podAnnotations: {}
   podAnnotations: 
     # config.alpha.linkerd.io/proxy-enable-native-sidecar: "true"

@@ -17,14 +17,13 @@ ingress:
     # nginx.ingress.kubernetes.io/proxy-no-cache: "true"
     # nginx.ingress.kubernetes.io/proxy-revalidate: "true"
     # nginx.ingress.kubernetes.io/proxy-cache-bypass: "true"
-    # linkerd.io/inject: enabled
-  # nginx.ingress.kubernetes.io/rewrite-target: /
-  # nginx.ingress.kubernetes.io/ssl-redirect: 'false'
-  # nginx.ingress.kubernetes.io/use-regex: 'true'
-  # tls:
-  #   - hosts:
-  #       - example.com
-  #     secretName: example-tls
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+    # nginx.ingress.kubernetes.io/ssl-redirect: 'false'
+    # nginx.ingress.kubernetes.io/use-regex: 'true'
+    # tls:
+    #   - hosts:
+    #       - example.com
+    #     secretName: example-tls
   rules:
     - host: projects.vastaya.tech
       paths:

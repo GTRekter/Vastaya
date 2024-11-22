@@ -1,4 +1,9 @@
 linkerd-control-plane:
+  controllerReplicas: 10
+  # enablePodAntiAffinity: true # Enable pod high availability
+  controllerLogLevel: debug
+  policyController:
+    logLevel: debug
   proxyInit:
     runAsRoot: true
   destinationController:

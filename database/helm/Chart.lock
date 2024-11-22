@@ -1,6 +1,0 @@
-dependencies:
-- name: mysql-innodbcluster
-  repository: https://mysql.github.io/mysql-operator/
-  version: 2.2.1
-digest: sha256:f13bb6012995a6f98409ddedf72d61d0f636dacfd9b835205f5b3438ab952e83
-generated: "2024-08-14T11:00:25.8016336+09:00"

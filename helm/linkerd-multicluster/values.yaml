@@ -1,12 +1,12 @@
-gateway:
-  enabled: true               
-  replicas: 2                
-  name: linkerd-gateway       
-  port: 4143                  
-  serviceType: NodePort       
-  nodePort: 32000             
-  probe:
-    path: /ready              
-    port: 4191               
-    nodePort: 32001           
-    seconds: 5                
+# gateway:
+#   enabled: true               
+#   replicas: 2                
+#   name: linkerd-gateway       
+#   port: 4143                  
+#   serviceType: NodePort       
+#   nodePort: 32000             
+#   probe:
+#     path: /ready              
+#     port: 4191               
+#     nodePort: 32001           
+#     seconds: 5                

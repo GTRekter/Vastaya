@@ -10,6 +10,7 @@ spec:
       controlPlaneConfig:
         identityTrustAnchorsPEM: |
 PLACEHOLDER_CERTIFICATE
+        controllerLogLevel: debug
         identity:
           issuer:
             scheme: kubernetes.io/tls

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ubuntu
+  annotations:
+    linkerd.io/inject: enabled
+spec:
+  containers:
+  - name: ubuntu
+    image: curlimages/curl:latest
+    command: ["sleep", "infinity"]

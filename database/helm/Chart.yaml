@@ -1,9 +1,0 @@
-apiVersion: v2
-name: mysql-cluster
-description: A Helm chart for deploying a MySQL InnoDB Cluster
-version: 0.1.0
-appVersion: "8.0"
-dependencies:
-  - name: mysql-innodbcluster
-    version: "^2.2.1"
-    repository: "https://mysql.github.io/mysql-operator/"

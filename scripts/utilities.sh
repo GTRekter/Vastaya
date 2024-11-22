@@ -1,7 +1,6 @@
 function log_message() {
     local STATUS=$1
     local MESSAGE=$2
-
     local NC='\033[0m'
     local RED='\033[0;31m'
     local GREEN='\033[0;32m'
@@ -9,7 +8,6 @@ function log_message() {
     local BLUE='\033[0;34m'
     local PURPLE='\033[0;35m'
     local DATE=$(date "+%H:%M:%S")
-
     case "$STATUS" in
         INFO)
             echo -e "${BLUE}${DATE} [INFO] ${MESSAGE}${NC}"
@@ -31,35 +29,12 @@ function log_message() {
             ;;
     esac
 }
-
-function isLinkerdEnterprise() {
-    local VERSION=$1
-    if ! command -v jq &> /dev/null; then
-        exit 1
-    fi
-    local VERSIONS=$(curl -s "https://artifacthub.io/api/v1/packages/helm/linkerd-buoyant/linkerd-enterprise-control-plane" | jq -r '.available_versions[].version')
-    if [ $? -ne 0 ] || [ -z "$VERSIONS" ]; then
-        return 1
-    fi
-    if echo "$VERSIONS" | grep -q "^$VERSION$"; then
-        return 0 
-    else
-        return 1 
-    fi
-}
-
-function isLinkerdStable() {
-    local VERSION=$1
-    if ! command -v jq &> /dev/null; then
-        exit 1
-    fi
-    local VERSIONS=$(curl -s "https://artifacthub.io/api/v1/packages/helm/linkerd2/linkerd-control-plane" | jq -r '.available_versions[].version')
-    if [ $? -ne 0 ] || [ -z "$VERSIONS" ]; then
-        return 1
-    fi
-    if echo "$VERSIONS" | grep -q "^$VERSION$"; then
-        return 0
-    else
-        return 1
-    fi
+function uninstall_helm_release {
+    RELEASE_NAME=$1
+    NAMESPACES=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')
+    for NAMESPACE in $NAMESPACES; do
+        if helm list -n $NAMESPACE | grep -q $RELEASE_NAME; then
+            helm uninstall $RELEASE_NAME -n $NAMESPACE
+        fi
+    done
 }
