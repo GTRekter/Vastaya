@@ -11,18 +11,18 @@ function prometheus.install {
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm repo update
     helm upgrade -install kube-state-metrics prometheus-community/kube-state-metrics \
-        --values ./helm/kube-state-metrics/values.yaml \
+        --values ./kubernetes/helm/kube-state-metrics/values.yaml \
         --namespace monitoring \
         --create-namespace 
     if [ "$LINKERD_VIZ_FEDERATION_ENABLED" == true ]; then
         helm upgrade --install prometheus prometheus-community/prometheus \
-        --values ./helm/prometheus/values-fedetation-viz.yaml \
+        --values ./kubernetes/helm/prometheus/values-fedetation-viz.yaml \
         --namespace monitoring \
         --create-namespace   
-    kubectl apply -f ./manifests/linkerd/prometheus-federate.yaml
+    kubectl apply -f ./kubernetes/manifests/linkerd/prometheus-federate.yaml
     else
         helm upgrade --install prometheus prometheus-community/prometheus \
-        --values ./helm/prometheus/values.yaml \
+        --values ./kubernetes/helm/prometheus/values.yaml \
         --namespace monitoring \
         --create-namespace  
     fi 

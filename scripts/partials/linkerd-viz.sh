@@ -1,3 +1,7 @@
+function linkerd_viz.cleanup {
+    helm uninstall linkerd-viz --namespace linkerd-viz
+    kubectl delete namespace linkerd-viz
+}
 function linkerd_viz.install {
     OPTIND=1
     local CERT_MANAGER_ENABLED="false"
@@ -8,7 +12,7 @@ function linkerd_viz.install {
         esac
     done
 
-    generate_certificates
+    linkerd_viz.generate_certificates
     if [ $? -ne 0 ]; then
         return 1
     fi
@@ -17,7 +21,7 @@ function linkerd_viz.install {
     helm repo update
     if [ "$CERT_MANAGER_ENABLED" == false ]; then
         helm upgrade --install linkerd-viz linkerd-edge/linkerd-viz \
-            --values ./helm/linkerd-viz/values.yaml \
+            --values ./kubernetes/helm/linkerd-viz/values.yaml \
             --set tap.enabled=true \
             --set tap.externalSecret=true \
             --set-file tap.crtPEM=./certificates/tap.crt \
@@ -27,7 +31,7 @@ function linkerd_viz.install {
             --namespace linkerd-viz
     else
         helm upgrade --install linkerd-viz linkerd-edge/linkerd-viz \
-            --values ./helm/linkerd-viz/values.yaml \
+            --values ./kubernetes/helm/linkerd-viz/values.yaml \
             --set tap.enabled=true \
             --set tap.externalSecret=true \
             --set tap.injectCaFrom=linkerd-viz/tap \
@@ -35,15 +39,15 @@ function linkerd_viz.install {
             --set tapInjector.injectCaFrom=linkerd-viz/linkerd-tap-injector \
             --create-namespace \
             --namespace linkerd-viz
-        deploy_cert_manager_resources
+        linkerd_viz.deploy_cert_manager_resources
         kubectl rollout restart deployment --namespace linkerd-viz
     fi
 
-    kubectl delete secret tls tap-k8s-tls --namespace=linkerd-viz --ignore-not-found
-    kubectl create secret tls tap-k8s-tls \
-        --namespace=linkerd-viz \
-        --cert=./certificates/tap.crt \
-        --key=./certificates/tap.key
+    # kubectl delete secret tls tap-k8s-tls --namespace=linkerd-viz --ignore-not-found
+    # kubectl create secret tls tap-k8s-tls \
+    #     --namespace=linkerd-viz \
+    #     --cert=./certificates/tap.crt \
+    #     --key=./certificates/tap.key
 
     kubectl rollout restart deployment --namespace=linkerd-viz tap
     kubectl rollout restart deployment --namespace=linkerd-viz tap-injector
@@ -51,7 +55,7 @@ function linkerd_viz.install {
 # ---------------------------------------------------------
 # Internal Functions
 # ---------------------------------------------------------
-function generate_certificates {
+function linkerd_viz.generate_certificates {
     step certificate create tap.linkerd-viz.svc ./certificates/tap.crt ./certificates/tap.key \
             --ca ./certificates/ca.crt \
             --ca-key ./certificates/ca.key \
@@ -65,12 +69,12 @@ function generate_certificates {
         return 1
     fi
 }
-function deploy_cert_manager_resources {
+function linkerd_viz.deploy_cert_manager_resources {
     kubectl delete secret linkerd-trust-anchor --namespace=linkerd-viz --ignore-not-found
     kubectl create secret tls linkerd-trust-anchor \
         --cert=./certificates/ca.crt \
         --key=./certificates/ca.key \
         --namespace=linkerd-viz   
-    kubectl delete -f ./manifests/linkerd/cert-manager-cert-viz.yaml --ignore-not-found
-    kubectl apply -f ./manifests/linkerd/cert-manager-cert-viz.yaml
+    kubectl delete -f ./kubernetes/manifests/linkerd/cert-manager-cert-viz.yaml --ignore-not-found
+    kubectl apply -f ./kubernetes/manifests/linkerd/cert-manager-cert-viz.yaml
 }

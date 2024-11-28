@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package tasks;
+
+// The Task message
+message Task {
+  int32 id = 1;
+  string name = 2;
+  string description = 3;
+  int32 projectId = 4;
+  string status = 5;
+}
+
+// Request and response messages for CreateTask
+message CreateTaskRequest {
+  string name = 1;
+  string description = 2;
+  int32 projectId = 3;
+}
+
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+// Request and response messages for GetTask
+message GetTaskRequest {
+  int32 id = 1;
+}
+
+message GetTaskResponse {
+  Task task = 1;
+}
+
+// Request and response messages for UpdateTask
+message UpdateTaskRequest {
+  Task task = 1;
+}
+
+message UpdateTaskResponse {
+  Task task = 1;
+}
+
+// Request and response messages for DeleteTask
+message DeleteTaskRequest {
+  int32 id = 1;
+}
+
+message DeleteTaskResponse {}
+
+message GetTasksRequest {}
+
+message GetTasksResponse {
+  repeated Task tasks = 1;
+}
+
+message GetTasksByProjectIdRequest {
+  int32 projectId = 1;
+}
+
+message GetTasksByProjectIdResponse {
+  repeated Task tasks = 1;
+}
+
+// Request and response messages for UpdateTaskStatus
+message UpdateTaskStatusRequest {
+  int32 id = 1;
+  string status = 2;
+}
+
+message UpdateTaskStatusResponse {
+  Task task = 1;
+}
+
+// The TaskService definition
+service TaskService {
+  rpc CreateTask (CreateTaskRequest) returns (CreateTaskResponse);
+  rpc GetTask (GetTaskRequest) returns (GetTaskResponse);
+  rpc UpdateTask (UpdateTaskRequest) returns (UpdateTaskResponse);
+  rpc DeleteTask (DeleteTaskRequest) returns (DeleteTaskResponse);
+  rpc GetTasks (GetTasksRequest) returns (GetTasksResponse);
+  rpc GetTasksByProjectId (GetTasksByProjectIdRequest) returns (GetTasksByProjectIdResponse);
+  rpc UpdateTaskStatus (UpdateTaskStatusRequest) returns (UpdateTaskStatusResponse);
+}

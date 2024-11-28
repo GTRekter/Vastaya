@@ -62,17 +62,20 @@ function minikube.start {
         if [ $? -ne 0 ]; then
             return 1
         fi
-        update_docker_insecure_registries
+        minikube.update_docker_insecure_registries
+        echo "Here"
+        kubectl port-forward --namespace kube-system service/registry 5000:80 &
+        # TODO: it's not working
     else
         eval "$(minikube docker-env)"
     fi
-    add_topology_label_to_nodes
-    add_agentpool_label_to_nodes
+    minikube.add_topology_label_to_nodes
+    minikube.add_agentpool_label_to_nodes
 }
 # ---------------------------------------------------------
 # Internal Functions
 # ---------------------------------------------------------
-function update_docker_insecure_registries {
+function minikube.update_docker_insecure_registries {
     local NODES_COUNT=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
     local SNAP_DOCKER_FILE="/snap/etc/docker/daemon.json"
     local DOCKER_FILE="/etc/docker/daemon.json"
@@ -89,7 +92,7 @@ function update_docker_insecure_registries {
     # log_message "WARNING" "Docker configuration file already exists. Manually add $REGISTRY_IP to the insecure registries."
     fi
 }
-function add_topology_label_to_nodes {
+function minikube.add_topology_label_to_nodes {
     ZONE_COUNTER=1
     NODES=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
     for NODE in $NODES; do
@@ -98,7 +101,7 @@ function add_topology_label_to_nodes {
         ZONE_COUNTER=$((ZONE_COUNTER + 1))
     done
 }
-function add_agentpool_label_to_nodes {
+function minikube.add_agentpool_label_to_nodes {
     POOL_COUNTER=1
     NODES=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name")
     NODE_COUNT=$(echo "$NODES" | wc -l)

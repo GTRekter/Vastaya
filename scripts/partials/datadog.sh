@@ -1,9 +1,9 @@
-function install_datadog {
+function datadog.install {
     local DATADOG_API_KEY="${1}"
     helm repo add datadog https://helm.datadoghq.com
     helm repo update
     helm upgrade --install datadog datadog/datadog \
-        --values ./helm/datadog/values.yaml \
+        --values ./kubernetes/helm/datadog/values.yaml \
         --create-namespace \
         --namespace datadog
     kubectl delete secret generic datadog-secret --namespace=datadog --ignore-not-found

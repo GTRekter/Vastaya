@@ -1,0 +1,24 @@
+{
+  "name": "tasks",
+  "version": "1.0.0",
+  "description": "This is the API for the tasks",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "webpack --config webpack.config.js"
+  },
+  "keywords": [
+    "node",
+    "api"
+  ],
+  "author": "Ivan Porta",
+  "license": "MIT",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.12.2",
+    "@grpc/proto-loader": "^0.7.13",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.0.0",
+    "mysql2": "^3.11.0"
+  }
+}

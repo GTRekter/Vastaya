@@ -1,8 +1,8 @@
 function linkerd-multicluster.install {
-    helm repo add linkerd-edge https://charts.linkerd.io/edge
+    helm repo add linkerd-edge https://helm.linkerd.io/edge
     helm repo update
     helm upgrade --install multicluster linkerd-edge/linkerd-multicluster \
-        --values ./helm/linkerd-multicluster/values.yaml \
+        --values ./kubernetes/helm/linkerd-multicluster/values.yaml \
         --create-namespace \
         --namespace linkerd-multicluster
 }

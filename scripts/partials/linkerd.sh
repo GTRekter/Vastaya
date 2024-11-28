@@ -3,7 +3,7 @@ function linkerd.cleanup {
     # kubectl delete secret linkerd-identity-issuer --namespace=linkerd --ignore-not-found
     # TODO: the CRDs might not exist
     # CERT_CONTENT=$(cat ./certificates/ca.crt | sed 's/^/          /')
-    # awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found --filename - 
+    # awk -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" '{gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' ./kubernetes/manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found --filename - 
     uninstall_helm_release linkerd-buoyant
     uninstall_helm_release linkerd-control-plane
     uninstall_helm_release linkerd-crds
@@ -34,20 +34,20 @@ function linkerd.install {
         esac
     done
 
-    generate_certificates
+    linkerd.generate_certificates
     if [ $? -ne 0 ]; then
         return 1
     fi
 
     if [ "$BUOYANT_OPERATOR" == true ]; then
-        install_operator -l "$BUOYANT_LICENSE" -e "$BUOYANT_CLOUD_ENABLED" -i "$BUOYANT_CLOUD_API_CLIENT_ID" -s "$BUOYANT_CLOUD_API_CLIENT_SECRET" -a "$BUOYANT_AGENT_NAME" -v "$LINKERD_VERSION"
+        linkerd.install_operator -l "$BUOYANT_LICENSE" -e "$BUOYANT_CLOUD_ENABLED" -i "$BUOYANT_CLOUD_API_CLIENT_ID" -s "$BUOYANT_CLOUD_API_CLIENT_SECRET" -a "$BUOYANT_AGENT_NAME" -v "$LINKERD_VERSION"
     else 
         LINKERD_ENTERPRISE=true
         # echo "Checking if Linkerd Enterprise $LINKERD_VERSION is available..."
-        is_enterprise -v $LINKERD_VERSION
+        linkerd.is_enterprise -v $LINKERD_VERSION
         if [ $? -ne 0 ]; then
         #     echo "Linkerd Enterprise $LINKERD_VERSION is not available. Installing Linkerd Edge instead."
-        #     is_edge -v $LINKERD_VERSION
+        #     linkerd.is_edge -v $LINKERD_VERSION
         #     if [ $? -ne 0 ]; then
         #         echo "Linkerd Edge $LINKERD_VERSION is not available. Exiting..."
         #         exit 1
@@ -56,13 +56,11 @@ function linkerd.install {
         #     fi
         fi
         if [ "$LINKERD_ENTERPRISE" == true ]; then
-            install_enterprise -l "$BUOYANT_LICENSE" -e "$BUOYANT_CLOUD_ENABLED" -i "$BUOYANT_CLOUD_API_CLIENT_ID" -s "$BUOYANT_CLOUD_API_CLIENT_SECRET" -a "$BUOYANT_AGENT_NAME" -c "$CERT_MANAGER_ENABLED" -v "$LINKERD_VERSION"
+            linkerd.install_enterprise -l "$BUOYANT_LICENSE" -e "$BUOYANT_CLOUD_ENABLED" -i "$BUOYANT_CLOUD_API_CLIENT_ID" -s "$BUOYANT_CLOUD_API_CLIENT_SECRET" -a "$BUOYANT_AGENT_NAME" -c "$CERT_MANAGER_ENABLED" -v "$LINKERD_VERSION"
         else
-            install_edge -c "$CERT_MANAGER_ENABLED" -v "$LINKERD_VERSION"
+            linkerd.install_edge -c "$CERT_MANAGER_ENABLED" -v "$LINKERD_VERSION"
         fi
     fi
-    
-
 }
 function linkerd.inject {
     OPTIND=1
@@ -128,18 +126,19 @@ function linkerd.remove_all_injections {
             ANNOTATION=$(kubectl get deployment "$DEPLOYMENT" --namespace "$NAMESPACE" --output jsonpath='{.spec.template.metadata.annotations.linkerd\.io/inject}' 2>/dev/null)
             if [[ "$ANNOTATION" == "enabled" ]]; then
                 kubectl patch deployment "$DEPLOYMENT" --namespace "$NAMESPACE" --type=json --patch='[{"op": "remove", "path": "/spec/template/metadata/annotations/linkerd.io~1inject"}]'
+                echo "kubectl patch deployment $DEPLOYMENT -n $NAMESPACE --type=json -p='[{\"op\": \"add\", \"path\": \"/spec/template/metadata/annotations/linkerd.io~1inject\", \"value\": \"enabled\"}]'"
                 # log_message "INFO" "kubectl patch deployment $DEPLOYMENT -n $NAMESPACE --type=json -p='[{\"op\": \"add\", \"path\": \"/spec/template/metadata/annotations/linkerd.io~1inject\", \"value\": \"enabled\"}]'"
             fi
         done
     done
 }
 function linkerd.deploy_http_route {
-    kubectl apply -f ./manifests/linkerd/httproute-gateway.yaml
+    kubectl apply -f ./kubernetes/manifests/linkerd/httproute-gateway.yaml
 }
 # ---------------------------------------------------------
 # Internal Functions
 # ---------------------------------------------------------
-function generate_certificates {
+function linkerd.generate_certificates {
     rm -rf ./certificates
     mkdir -p ./certificates
     if [ $? -ne 0 ]; then
@@ -165,7 +164,7 @@ function generate_certificates {
         return 1
     fi
 }
-function is_enterprise {
+function linkerd.is_enterprise {
     OPTIND=1
     local VERSION=""
     while getopts "v:" opt; do
@@ -184,7 +183,7 @@ function is_enterprise {
         return 1
     fi
 }
-function is_edge {
+function linkerd.is_edge {
     OPTIND=1
     local VERSION=""
     while getopts "v:" opt; do
@@ -203,7 +202,7 @@ function is_edge {
         return 1
     fi
 }
-function install_cli {
+function linkerd.install_cli {
     OPTIND=1
     local LINKERD_ENTERPRISE=""
     while getopts "e:" opt; do
@@ -219,7 +218,7 @@ function install_cli {
     fi
     export PATH="$HOME/.linkerd2/bin:$PATH"
 }
-function install_operator {
+function linkerd.install_operator {
     OPTIND=1
     local BUOYANT_LICENSE=""
     local BUOYANT_CLOUD_ENABLED="false"
@@ -269,7 +268,7 @@ function install_operator {
     CERT_CONTENT=$(sed 's/^/          /' ./certificates/ca.crt)
     awk -v version="enterprise-$LINKERD_VERSION" -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" \
         '{gsub(/PLACEHOLDER_VERSION/, version); gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' \
-        ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found --filename - 
+        ./kubernetes/manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl delete --ignore-not-found --filename - 
     kubectl wait --for=condition=available \
         --timeout=300s deployment \
         --namespace=linkerd-buoyant \
@@ -285,9 +284,9 @@ function install_operator {
     sleep 5
     awk -v version="enterprise-$LINKERD_VERSION" -v cert="$CERT_CONTENT" -v license="$BUOYANT_LICENSE" \
         '{gsub(/PLACEHOLDER_VERSION/, version); gsub(/PLACEHOLDER_CERTIFICATE/, cert); gsub(/PLACEHOLDER_LICENSE/, license)}1' \
-        ./manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl apply --filename -
+        ./kubernetes/manifests/linkerd/linkerd-operator-control-plane.yaml | kubectl apply --filename -
 }
-function install_enterprise {
+function linkerd.install_enterprise {
     OPTIND=1
     local BUOYANT_LICENSE=""
     local BUOYANT_CLOUD_ENABLED="false"
@@ -320,7 +319,7 @@ function install_enterprise {
     if [ "$CERT_MANAGER_ENABLED" == false ]; then    
         helm upgrade --install linkerd-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
             --version "$LINKERD_VERSION" \
-            --values ./helm/linkerd-enterprise/values.yaml \
+            --values ./kubernetes/helm/linkerd-enterprise/values.yaml \
             --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
             --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=./certificates/issuer.crt \
             --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=./certificates/issuer.key \
@@ -328,15 +327,15 @@ function install_enterprise {
             --namespace linkerd \
             --create-namespace 
     else 
-        helm upgrade --install linkerd-enterprise-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
+        helm upgrade --install linkerd-control-plane linkerd-buoyant/linkerd-enterprise-control-plane \
             --version "$LINKERD_VERSION" \
-            --values ./helm/linkerd-enterprise/values.yaml \
+            --values ./kubernetes/helm/linkerd-enterprise/values.yaml \
             --set-file linkerd-control-plane.identityTrustAnchorsPEM=./certificates/ca.crt \
             --set linkerd-control-plane.identity.issuer.scheme=kubernetes.io/tls \
             --set license="$BUOYANT_LICENSE" \
             --namespace linkerd \
             --create-namespace 
-        deploy_cert_manager_resources
+        linkerd.deploy_cert_manager_resources
         kubectl rollout restart deployment --namespace linkerd
     fi  
     if [ "$BUOYANT_CLOUD_ENABLED" == true ]; then
@@ -351,7 +350,7 @@ function install_enterprise {
             --create-namespace
     fi
 }
-function install_edge {
+function linkerd.install_edge {
     OPTIND=1
     local CERT_MANAGER_ENABLED="false"
     local LINKERD_VERSION="2.16.2"
@@ -384,16 +383,16 @@ function install_edge {
             --set runAsRoot=true \
             --namespace linkerd \
             --create-namespace 
-        deploy_cert_manager_resources
+        linkerd.deploy_cert_manager_resources
         kubectl rollout restart deployment --namespace linkerd
     fi  
 }
-function deploy_cert_manager_resources {
+function linkerd.deploy_cert_manager_resources {
     kubectl delete secret linkerd-trust-anchor --namespace=linkerd --ignore-not-found
     kubectl create secret tls linkerd-trust-anchor \
         --cert=./certificates/ca.crt \
         --key=./certificates/ca.key \
         --namespace=linkerd   
-    kubectl delete -f ./manifests/linkerd/cert-manager-cert.yaml --ignore-not-found
-    kubectl apply -f ./manifests/linkerd/cert-manager-cert.yaml
+    kubectl delete -f ./kubernetes/manifests/linkerd/cert-manager-cert.yaml --ignore-not-found
+    kubectl apply -f ./kubernetes/manifests/linkerd/cert-manager-cert.yaml
 }

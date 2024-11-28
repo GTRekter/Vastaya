@@ -7,16 +7,26 @@ function application.cleanup {
 function application.build {
     OPTIND=1
     local REGISTRY_SERVER="localhost:5000"
-    while getopts "r:" opt; do
+    local APP_PROTOCOL="http"
+    while getopts "r:p:" opt; do
         case $opt in
             r) REGISTRY_SERVER="$OPTARG" ;;
+            p) APP_PROTOCOL="$OPTARG" ;;
             *) echo "Invalid option: -$OPTARG" >&2; return 1 ;;
         esac
     done
-    docker build --quiet -t $REGISTRY_SERVER/application ./application
-    docker build --quiet -t $REGISTRY_SERVER/projects ./apis/projects
-    docker build --quiet -t $REGISTRY_SERVER/tasks ./apis/tasks
-    docker build --quiet -t $REGISTRY_SERVER/comments ./apis/comments
+    # TODO: Implement the build process for the application and comments services
+    if [ "$APP_PROTOCOL" == "grpc" ]; then
+        docker build --quiet -t $REGISTRY_SERVER/projects ./services/$APP_PROTOCOL/projects
+        docker build --quiet -t $REGISTRY_SERVER/tasks ./services/$APP_PROTOCOL/tasks
+        docker build --quiet -t $REGISTRY_SERVER/comments ./services/$APP_PROTOCOL/comments
+    fi
+    if [ "$APP_PROTOCOL" == "http" ]; then
+        docker build --quiet -t $REGISTRY_SERVER/application ./services/$APP_PROTOCOL/application
+        docker build --quiet -t $REGISTRY_SERVER/projects ./services/$APP_PROTOCOL/projects
+        docker build --quiet -t $REGISTRY_SERVER/tasks ./services/$APP_PROTOCOL/tasks
+        docker build --quiet -t $REGISTRY_SERVER/comments ./services/$APP_PROTOCOL/comments
+    fi
 }
 function application.push {
     OPTIND=1
@@ -44,34 +54,36 @@ function application.push {
 function application.install {
     OPTIND=1
     local REGISTRY_SERVER="localhost:5000"
-    while getopts "r:" opt; do
+    local APP_PROTOCOL="http"
+    while getopts "r:p:" opt; do
         case $opt in
             r) REGISTRY_SERVER="$OPTARG" ;;
+            p) APP_PROTOCOL="$OPTARG" ;;
             *) echo "Invalid option: -$OPTARG" >&2; return 1 ;;
         esac
     done
-    helm upgrade --install application \
-        --values ./application/helm/values.yaml \
-        --set container.image.repository=$REGISTRY_SERVER \
-        --create-namespace \
-        --namespace vastaya \
-        ./helm/custom/
+    # helm upgrade --install application \
+    #     --values ./services/$APP_PROTOCOL/application/helm/values.yaml \
+    #     --set container.image.repository=$REGISTRY_SERVER \
+    #     --create-namespace \
+    #     --namespace vastaya \
+    #     ./kubernetes/helm/custom/
     helm upgrade --install projects \
-        --values ./apis/projects/helm/values.yaml \
+        --values ./services/$APP_PROTOCOL/projects/helm/values.yaml \
         --set container.image.repository=$REGISTRY_SERVER \
         --create-namespace \
         --namespace vastaya \
-        ./helm/custom/
+        ./kubernetes/helm/custom/
     helm upgrade --install tasks \
-        --values ./apis/tasks/helm/values.yaml \
+        --values ./services/$APP_PROTOCOL/tasks/helm/values.yaml \
         --set container.image.repository=$REGISTRY_SERVER \
         --create-namespace \
         --namespace vastaya \
-        ./helm/custom/
+        ./kubernetes/helm/custom/
     helm upgrade --install comments \
-        --values ./apis/comments/helm/values.yaml \
+        --values ./services/$APP_PROTOCOL/comments/helm/values.yaml \
         --set container.image.repository=$REGISTRY_SERVER \
         --create-namespace \
         --namespace vastaya \
-        ./helm/custom/
+        ./kubernetes/helm/custom/
 }
