@@ -44,8 +44,6 @@ spec:
               value: {{ .Values.frontend.env.galaxiesUrl | quote }}
             - name: PLANETS_URL
               value: {{ .Values.frontend.env.planetsUrl | quote }}
-            - name: COMMENTS_URL
-              value: {{ .Values.frontend.env.commentsUrl | quote }}
           livenessProbe:
             httpGet:
               path: /healthz

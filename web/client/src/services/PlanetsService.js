@@ -85,23 +85,10 @@ class PlanetsService {
             throw err;
         });
     }
-    getWorkerBaseUrl(galaxyId, planet) {
-        if (!planet || !planet.serviceName) {
-            throw new Error('Planet worker service is not available.');
-        }
-
-        const namespace = (galaxyId || '').trim();
-        if (!namespace) {
-            throw new Error('Galaxy identifier is required to reach the planet worker.');
-        }
-
-        const serviceHost = `${planet.serviceName}.${namespace}.svc.cluster.local`;
-        const httpPort = planet.httpPort ? Number(planet.httpPort) : 8080;
-        return `http://${serviceHost}:${httpPort}`;
-    }
-    getPlanetTrafficStatus(galaxyId, planet) {
-        const baseUrl = this.getWorkerBaseUrl(galaxyId, planet);
-        return fetch(`${baseUrl}/status`, {
+    getPlanetTrafficStatus(galaxyId, planetId) {
+        const encodedGalaxy = encodeURIComponent(galaxyId);
+        const encodedPlanet = encodeURIComponent(planetId);
+        return fetch(`${process.env.REACT_APP_PLANETS_API_URL}/galaxies/${encodedGalaxy}/${encodedPlanet}/traffic/status`, {
             method: 'GET',
             mode: 'cors',
             headers: {
@@ -123,9 +110,10 @@ class PlanetsService {
                 throw err;
             });
     }
-    startPlanetTraffic(galaxyId, planet, config) {
-        const baseUrl = this.getWorkerBaseUrl(galaxyId, planet);
-        return fetch(`${baseUrl}/send`, {
+    startPlanetTraffic(galaxyId, planetId, config) {
+        const encodedGalaxy = encodeURIComponent(galaxyId);
+        const encodedPlanet = encodeURIComponent(planetId);
+        return fetch(`${process.env.REACT_APP_PLANETS_API_URL}/galaxies/${encodedGalaxy}/${encodedPlanet}/traffic/start`, {
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -149,9 +137,10 @@ class PlanetsService {
                 throw err;
             });
     }
-    stopPlanetTraffic(galaxyId, planet) {
-        const baseUrl = this.getWorkerBaseUrl(galaxyId, planet);
-        return fetch(`${baseUrl}/stop`, {
+    stopPlanetTraffic(galaxyId, planetId) {
+        const encodedGalaxy = encodeURIComponent(galaxyId);
+        const encodedPlanet = encodeURIComponent(planetId);
+        return fetch(`${process.env.REACT_APP_PLANETS_API_URL}/galaxies/${encodedGalaxy}/${encodedPlanet}/traffic/stop`, {
             method: 'POST',
             mode: 'cors',
             headers: {

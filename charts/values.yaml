@@ -26,7 +26,6 @@ frontend:
   env:
     galaxiesUrl: http://galaxies-svc.vastaya.svc.cluster.local:8081
     planetsUrl: http://planets-svc.vastaya.svc.cluster.local:8082
-    commentsUrl: http://comments-svc.vastaya.svc.cluster.local:8083
 
 galaxies:
   enabled: true

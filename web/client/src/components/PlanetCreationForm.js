@@ -42,9 +42,6 @@ export default function PlanetCreationForm({
                         value={form.internalDelayMs}
                         onChange={handleInputChange('internalDelayMs')}
                     />
-                    <small className="form-text text-white-50">
-                        Adds latency to every worker response.
-                    </small>
                 </div>
                 {form.error && (
                     <div className="col-12">

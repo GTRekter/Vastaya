@@ -75,7 +75,6 @@ export default class Galaxies extends Component {
 
     constructor(props) {
         super(props);
-        this.onClickViewGalaxy = this.onClickViewGalaxy.bind(this);
         this.onClickDeleteGalaxy = this.onClickDeleteGalaxy.bind(this);
     }
 
@@ -95,11 +94,6 @@ export default class Galaxies extends Component {
                 });
             })
             .catch(error => console.error('Error fetching galaxies:', error));
-    }
-
-    onClickViewGalaxy(galaxyId) {
-        console.log("View galaxy", galaxyId);
-        this.props.history.push(`/galaxies/${galaxyId}`);
     }
 
     onClickDeleteGalaxy(galaxyId) {
@@ -411,7 +405,7 @@ export default class Galaxies extends Component {
             error: null,
         }));
 
-        PlanetsService.getPlanetTrafficStatus(galaxyId, planet)
+        PlanetsService.getPlanetTrafficStatus(galaxyId, planetId)
             .then(status => {
                 this.setTrafficPanelState(planetId, () => ({
                     status,
@@ -522,7 +516,7 @@ export default class Galaxies extends Component {
             error: null,
         }));
 
-        PlanetsService.startPlanetTraffic(galaxyId, planet, payload)
+        PlanetsService.startPlanetTraffic(galaxyId, planetId, payload)
             .then(() => {
                 this.refreshTrafficStatus(galaxyId, planetId);
                 this.setTrafficPanelState(planetId, () => ({
@@ -551,7 +545,7 @@ export default class Galaxies extends Component {
             error: null,
         }));
 
-        PlanetsService.stopPlanetTraffic(galaxyId, planet)
+        PlanetsService.stopPlanetTraffic(galaxyId, planetId)
             .then(() => {
                 this.refreshTrafficStatus(galaxyId, planetId);
                 this.setTrafficPanelState(planetId, () => ({
@@ -1018,7 +1012,7 @@ export default class Galaxies extends Component {
                                                         <img
                                                             src={galaxy.image}
                                                             alt={`${galaxy.name} preview`}
-                                                            className="rounded-3 border border-light-subtle object-fit-cover"
+                                                            className="object-fit-cover"
                                                         />
                                                         <div className="d-flex flex-column align-items-start gap-1 text-start">
                                                             <span className="fs-5 fw-semibold text-white">
@@ -1038,13 +1032,6 @@ export default class Galaxies extends Component {
                                                 <div className="accordion-body">
                                                     <div className="d-flex flex-column gap-4">
                                                         <div className="d-flex flex-wrap gap-3">
-                                                            <button
-                                                                type="button"
-                                                                className="btn btn-outline-light"
-                                                                onClick={() => this.onClickViewGalaxy(galaxy.id)}
-                                                            >
-                                                                View details
-                                                            </button>
                                                             <button
                                                                 type="button"
                                                                 className="btn btn-outline-danger"
@@ -1076,7 +1063,6 @@ export default class Galaxies extends Component {
                                                                                         <th scope="col">Replicas</th>
                                                                                         <th scope="col">Delay (ms)</th>
                                                                                         <th scope="col">Spaceport</th>
-                                                                                        <th scope="col">Status</th>
                                                                                         <th scope="col" className="text-end">Actions</th>
                                                                                     </tr>
                                                                                 </thead>
@@ -1088,6 +1074,11 @@ export default class Galaxies extends Component {
                                                                                         const isDeletingPlanet = Boolean(
                                                                                             planetDeletion[planet.id]
                                                                                         );
+                                                                                        const panelState =
+                                                                                            trafficPanels[planet.id] || null;
+                                                                                        const spaceportStatus = panelState?.status?.active
+                                                                                            ? 'traffic in progress'
+                                                                                            : (planet.spaceportStatus || 'open');
                                                                                         return (
                                                                                             <tr
                                                                                                 key={planet.id}
@@ -1099,16 +1090,13 @@ export default class Galaxies extends Component {
                                                                                                 <td>{planet.responseDelayMs ?? 0}</td>
                                                                                                 <td>
                                                                                                     <span className="text-capitalize">
-                                                                                                        {planet.spaceportStatus || 'unknown'}
+                                                                                                        {spaceportStatus}
                                                                                                     </span>
                                                                                                     <small className="d-block text-white-50">
                                                                                                         {planet.serviceName
-                                                                                                            ? `${planet.serviceName}.${galaxy.id}.svc`
+                                                                                                            ? `${planet.serviceName}.${galaxy.id}.svc.cluster.local`
                                                                                                             : 'No service'}
                                                                                                     </small>
-                                                                                                </td>
-                                                                                                <td className="text-capitalize">
-                                                                                                    {planet.status || 'unknown'}
                                                                                                 </td>
                                                                                                 <td className="text-end">
                                                                                                     <div className="btn-group btn-group-sm" role="group">
@@ -1117,10 +1105,10 @@ export default class Galaxies extends Component {
                                                                                                             className={`btn btn-outline-light ${isSelected ? 'active' : ''}`}
                                                                                                             disabled={
                                                                                                                 isDeletingGalaxy ||
-                                                isDeletingPlanet ||
-                                                (isPlanetDeleteModalOpen &&
-                                                    planetDeleteModal.planetId === planet.id)
-                                            }
+                                                                                                                isDeletingPlanet ||
+                                                                                                                (isPlanetDeleteModalOpen &&
+                                                                                                                    planetDeleteModal.planetId === planet.id)
+                                                                                                            }
                                                                                                             onClick={() =>
                                                                                                                 this.handleSelectPlanetForTraffic(
                                                                                                                     galaxy.id,
@@ -1134,11 +1122,11 @@ export default class Galaxies extends Component {
                                                                                                             type="button"
                                                                                                             className="btn btn-outline-danger"
                                                                                                             disabled={
-                                                isDeletingGalaxy ||
-                                                isDeletingPlanet ||
-                                                (isPlanetDeleteModalOpen &&
-                                                    planetDeleteModal.planetId === planet.id)
-                                            }
+                                                                                                                isDeletingGalaxy ||
+                                                                                                                isDeletingPlanet ||
+                                                                                                                (isPlanetDeleteModalOpen &&
+                                                                                                                    planetDeleteModal.planetId === planet.id)
+                                                                                                            }
                                                                                                             onClick={() =>
                                                                                                                 this.handleDeletePlanet(
                                                                                                                     galaxy.id,

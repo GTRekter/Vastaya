@@ -9,7 +9,6 @@ const router = express.Router();
 const proxyMap = {
   '/galaxies': process.env.GALAXIES_URL || 'http://galaxies-svc.vastaya.svc.cluster.local:8081',
   '/planets': process.env.PLANETS_URL || 'http://planets-svc.vastaya.svc.cluster.local:8082',
-  '/comments': process.env.COMMENTS_URL || 'http://comments-svc.vastaya.svc.cluster.local:8083',
 };
 
 Object.entries(proxyMap).forEach(([route, target]) => {

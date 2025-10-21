@@ -27,7 +27,7 @@ const SPACEPORT_STATUS_KEY = 'spaceportStatus';
 const DEFAULT_STATUS = 'open';
 const DEFAULT_RESPONSE_DELAY_MS = 0;
 const MAX_RESPONSE_DELAY_MS = 5 * 60 * 1000;
-const DEFAULT_SPACEPORT_STATUS = 'active';
+const DEFAULT_SPACEPORT_STATUS = 'open';
 
 const PLANET_WORKER_IMAGE =
   process.env.PLANET_WORKER_IMAGE || 'planet-worker:latest';
@@ -175,8 +175,7 @@ async function ensurePlanetConfigMap(
   displayName,
   status,
   replicas,
-  responseDelayMs,
-  spaceportStatus
+  responseDelayMs
 ) {
   const manifest = {
     apiVersion: 'v1',
@@ -192,7 +191,7 @@ async function ensurePlanetConfigMap(
       [STATUS_KEY]: status,
       [REPLICAS_KEY]: String(replicas),
       [RESPONSE_DELAY_KEY]: String(responseDelayMs),
-      [SPACEPORT_STATUS_KEY]: spaceportStatus,
+      [SPACEPORT_STATUS_KEY]: DEFAULT_SPACEPORT_STATUS,
     },
   };
 
@@ -377,6 +376,63 @@ async function deletePlanetResources(galaxyId, planetId) {
   }
 }
 
+function planetWorkerHostname(galaxyId, planetId) {
+  return `${planetId}-${PLANET_SERVICE_SUFFIX}.${galaxyId}.svc.cluster.local`;
+}
+
+async function callPlanetWorker({
+  galaxyId,
+  planetId,
+  path,
+  method = 'GET',
+  body,
+}) {
+  const hostname = planetWorkerHostname(galaxyId, planetId);
+  const url = `http://${hostname}:${PLANET_HTTP_PORT}${path}`;
+
+  const headers = {
+    Accept: 'application/json',
+  };
+
+  const options = {
+    method,
+    headers,
+  };
+
+  if (body !== undefined && body !== null) {
+    options.headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(body);
+  } else {
+    delete options.headers['Content-Type'];
+  }
+
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let data = null;
+
+  if (text && text.length > 0) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      (data && data.message) ||
+        `Planet worker request failed with status ${response.status}`
+    );
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return {
+    status: response.status,
+    data,
+  };
+}
+
 async function listManagedGalaxyNamespaces() {
   const response = await coreV1Api.listNamespace();
   return (response.body?.items ?? []).filter((item) =>
@@ -417,6 +473,25 @@ async function listPlanetsForGalaxy(galaxyId) {
   return items.map((item) => configMapToPlanet(item));
 }
 
+async function ensureManagedPlanet(galaxyId, planetId) {
+  const namespace = await readNamespace(galaxyId);
+
+  if (!namespace || !isManagedGalaxyNamespace(namespace)) {
+    const error = new Error('Galaxy not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const configMap = await readPlanetConfigMap(galaxyId, planetId);
+  if (!configMap) {
+    const error = new Error('Planet not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return configMap;
+}
+
 async function ensurePlanetWorkload({
   galaxyId,
   resourceName,
@@ -424,7 +499,6 @@ async function ensurePlanetWorkload({
   status,
   replicas,
   responseDelayMs,
-  spaceportStatus,
 }) {
   await ensurePlanetConfigMap(
     galaxyId,
@@ -432,8 +506,7 @@ async function ensurePlanetWorkload({
     displayName,
     status,
     replicas,
-    responseDelayMs,
-    spaceportStatus
+    responseDelayMs
   );
   await ensurePlanetDeployment(
     galaxyId,
@@ -461,8 +534,6 @@ async function createPlanet(galaxyId, planetInput) {
   const responseDelayMs = sanitizeResponseDelay(
     planetInput.responseDelayMs ?? DEFAULT_RESPONSE_DELAY_MS
   );
-  const spaceportStatus = DEFAULT_SPACEPORT_STATUS;
-
   await ensurePlanetWorkload({
     galaxyId,
     resourceName,
@@ -470,7 +541,6 @@ async function createPlanet(galaxyId, planetInput) {
     status,
     replicas,
     responseDelayMs,
-    spaceportStatus,
   });
 
   const configMap = await readPlanetConfigMap(galaxyId, resourceName);
@@ -640,12 +710,6 @@ app.put('/planets/galaxies/:galaxyId/:planetId/status', async (req, res) => {
     const responseDelayMs = sanitizeResponseDelay(
       configMap?.data?.[RESPONSE_DELAY_KEY] ?? DEFAULT_RESPONSE_DELAY_MS
     );
-    const spaceportStatusRaw =
-      (configMap?.data?.[SPACEPORT_STATUS_KEY] ?? DEFAULT_SPACEPORT_STATUS).toString();
-    const spaceportStatus =
-      spaceportStatusRaw.trim().length > 0
-        ? spaceportStatusRaw.trim()
-        : DEFAULT_SPACEPORT_STATUS;
     const displayName =
       configMap?.metadata?.annotations?.[DISPLAY_NAME_ANNOTATION] ??
       configMap?.metadata?.name ??
@@ -658,7 +722,6 @@ app.put('/planets/galaxies/:galaxyId/:planetId/status', async (req, res) => {
       status: sanitizedStatus,
       replicas,
       responseDelayMs,
-      spaceportStatus,
     });
 
     const updated = await readPlanetConfigMap(galaxyId, planetId);
@@ -682,17 +745,7 @@ app.delete('/planets/galaxies/:galaxyId/:planetId', async (req, res) => {
   }
 
   try {
-    const namespace = await readNamespace(galaxyId);
-
-    if (!namespace || !isManagedGalaxyNamespace(namespace)) {
-      return res.status(404).json({ message: 'Galaxy not found' });
-    }
-
-    const configMap = await readPlanetConfigMap(galaxyId, planetId);
-    if (!configMap) {
-      return res.status(404).json({ message: 'Planet not found' });
-    }
-
+    await ensureManagedPlanet(galaxyId, planetId);
     await deletePlanetResources(galaxyId, planetId);
     res.status(204).send();
   } catch (err) {
@@ -701,6 +754,97 @@ app.delete('/planets/galaxies/:galaxyId/:planetId', async (req, res) => {
     res
       .status(statusCode)
       .json({ message: err.message || 'Failed to delete planet' });
+  }
+});
+
+app.get('/planets/galaxies/:galaxyId/:planetId/traffic/status', async (req, res) => {
+  const { galaxyId, planetId } = req.params;
+
+  if (!isValidNamespaceName(galaxyId)) {
+    return res.status(400).json({
+      message:
+        'Galaxy name must be a valid Kubernetes namespace (lowercase alphanumeric and dashes)',
+    });
+  }
+
+  try {
+    await ensureManagedPlanet(galaxyId, planetId);
+    const { status, data } = await callPlanetWorker({
+      galaxyId,
+      planetId,
+      path: '/status',
+    });
+    res.status(status).json(data ?? {});
+  } catch (err) {
+    console.error('Failed to fetch planet traffic status:', err);
+    const statusCode = err.statusCode || err.response?.statusCode || 502;
+    const message =
+      statusCode === 404
+        ? err.message || 'Planet not found'
+        : err.message || 'Failed to fetch planet traffic status';
+    res.status(statusCode).json({ message });
+  }
+});
+
+app.post('/planets/galaxies/:galaxyId/:planetId/traffic/start', async (req, res) => {
+  const { galaxyId, planetId } = req.params;
+  const config = req.body ?? {};
+
+  if (!isValidNamespaceName(galaxyId)) {
+    return res.status(400).json({
+      message:
+        'Galaxy name must be a valid Kubernetes namespace (lowercase alphanumeric and dashes)',
+    });
+  }
+
+  try {
+    await ensureManagedPlanet(galaxyId, planetId);
+    const { status, data } = await callPlanetWorker({
+      galaxyId,
+      planetId,
+      path: '/send',
+      method: 'POST',
+      body: config,
+    });
+    res.status(status).json(data ?? {});
+  } catch (err) {
+    console.error('Failed to start planet traffic:', err);
+    const statusCode = err.statusCode || err.response?.statusCode || 502;
+    const message =
+      statusCode === 404
+        ? err.message || 'Planet not found'
+        : err.message || 'Failed to start planet traffic';
+    res.status(statusCode).json({ message });
+  }
+});
+
+app.post('/planets/galaxies/:galaxyId/:planetId/traffic/stop', async (req, res) => {
+  const { galaxyId, planetId } = req.params;
+
+  if (!isValidNamespaceName(galaxyId)) {
+    return res.status(400).json({
+      message:
+        'Galaxy name must be a valid Kubernetes namespace (lowercase alphanumeric and dashes)',
+    });
+  }
+
+  try {
+    await ensureManagedPlanet(galaxyId, planetId);
+    const { status, data } = await callPlanetWorker({
+      galaxyId,
+      planetId,
+      path: '/stop',
+      method: 'POST',
+    });
+    res.status(status).json(data ?? {});
+  } catch (err) {
+    console.error('Failed to stop planet traffic:', err);
+    const statusCode = err.statusCode || err.response?.statusCode || 502;
+    const message =
+      statusCode === 404
+        ? err.message || 'Planet not found'
+        : err.message || 'Failed to stop planet traffic';
+    res.status(statusCode).json({ message });
   }
 });
 
