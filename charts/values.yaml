@@ -1,0 +1,115 @@
+imagePullSecrets: []
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vastaya-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: http
+    nodePort: null
+    annotations: {}
+    loadBalancerIP: ""
+    loadBalancerSourceRanges: []
+    externalTrafficPolicy: ""
+  podAnnotations: {}
+  podLabels: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  env:
+    galaxiesUrl: http://galaxies-svc.vastaya.svc.cluster.local:8081
+    planetsUrl: http://planets-svc.vastaya.svc.cluster.local:8082
+    commentsUrl: http://comments-svc.vastaya.svc.cluster.local:8083
+
+galaxies:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: galaxies-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  rbac:
+    create: true
+  service:
+    type: ClusterIP
+    port: 8081
+    annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  env:
+    port: "8081"
+    tasksApiUrl: ""
+
+planets:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: planets-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  rbac:
+    create: true
+  service:
+    type: ClusterIP
+    port: 8082
+    annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  env:
+    port: "8082"
+    workerImage: planet-worker:latest
+    workerHttpPort: "8080"
+    workerGrpcPort: "50051"
+    maxReplicas: "50"
+
+planetWorker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: planet-worker
+    tag: latest
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  service:
+    type: ClusterIP
+    httpPort: 8080
+    grpcPort: 50051
+    annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  env:
+    planetId: demo-planet
+    planetName: Demo Planet
+    galaxyId: demo-galaxy
+    httpPort: "8080"
+    grpcPort: "50051"
+    responseDelayMs: "0"

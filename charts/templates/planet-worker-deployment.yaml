@@ -1,0 +1,83 @@
+{{- if .Values.planetWorker.enabled }}
+{{- $labels := dict "root" . "name" "planet-worker" "component" "planet-worker" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment-planet-worker
+  labels:
+    {{- include "vastaya.standardLabels" $labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.planetWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vastaya.selectorLabels" $labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vastaya.selectorLabels" $labels | nindent 8 }}
+        {{- with .Values.planetWorker.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.planetWorker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.planetWorker.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.planetWorker.imagePullSecrets | nindent 8 }}
+      {{- else if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: planet-worker
+          image: "{{ .Values.planetWorker.image.repository }}:{{ .Values.planetWorker.image.tag }}"
+          imagePullPolicy: {{ .Values.planetWorker.image.pullPolicy }}
+          env:
+            - name: PLANET_ID
+              value: {{ .Values.planetWorker.env.planetId | quote }}
+            - name: PLANET_NAME
+              value: {{ .Values.planetWorker.env.planetName | quote }}
+            - name: GALAXY_ID
+              value: {{ .Values.planetWorker.env.galaxyId | quote }}
+            - name: HTTP_PORT
+              value: {{ .Values.planetWorker.env.httpPort | quote }}
+            - name: GRPC_PORT
+              value: {{ .Values.planetWorker.env.grpcPort | quote }}
+            - name: PLANET_RESPONSE_DELAY_MS
+              value: {{ .Values.planetWorker.env.responseDelayMs | quote }}
+          ports:
+            - containerPort: {{ .Values.planetWorker.service.httpPort }}
+              name: http
+            - containerPort: {{ .Values.planetWorker.service.grpcPort }}
+              name: grpc
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.planetWorker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.planetWorker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.planetWorker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.planetWorker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

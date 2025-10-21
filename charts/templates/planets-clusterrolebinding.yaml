@@ -1,0 +1,18 @@
+{{- if and .Values.planets.enabled .Values.planets.serviceAccount.create .Values.planets.rbac.create }}
+{{- $labels := dict "root" . "name" "planets-api" "component" "planets-api" }}
+{{- $serviceAccountName := default "serviceaccount-planets-api" .Values.planets.serviceAccount.name }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: clusterrolebinding-planets-api
+  labels:
+    {{- include "vastaya.standardLabels" $labels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: clusterrole-planets-api
+subjects:
+  - kind: ServiceAccount
+    name: {{ $serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

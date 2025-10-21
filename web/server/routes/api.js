@@ -7,7 +7,6 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const router = express.Router();
 
 const proxyMap = {
-  '/users': process.env.USERS_URL || 'http://users-svc.vastaya.svc.cluster.local:8080',
   '/galaxies': process.env.GALAXIES_URL || 'http://galaxies-svc.vastaya.svc.cluster.local:8081',
   '/planets': process.env.PLANETS_URL || 'http://planets-svc.vastaya.svc.cluster.local:8082',
   '/comments': process.env.COMMENTS_URL || 'http://comments-svc.vastaya.svc.cluster.local:8083',

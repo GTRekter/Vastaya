@@ -30,9 +30,6 @@ export default class NavigationBar extends Component {
               <li className="nav-item">
                 <Link className="nav-link" to='/galaxies'>Galaxies</Link>
               </li>
-              <li className="nav-item">
-                <Link className="nav-link" to='/users'>Users</Link>
-              </li>
             </ul>
           </div>
         </div>

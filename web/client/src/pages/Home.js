@@ -13,7 +13,7 @@ export default class Home extends Component {
                     <h1>Welcome to the Kubernetes Microservices Demo</h1>
                     <p className="lead">
                         This demo application showcases a microservices architecture with a React.js frontend and Node.js APIs, managed via the Yarn package manager. 
-                        Currently, it features three APIs: Users, Galaxies, and Planets, with more to come. 
+                        Currently, it features three APIs: Galaxies, and Planets, with more to come. 
                         All data is stored in memory, providing a simple yet effective demonstration of Kubernetes orchestration. 
                         Explore how Kubernetes facilitates deployment, scaling, and management of containerized applications in a real-world scenario.
                     </p>

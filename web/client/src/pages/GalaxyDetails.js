@@ -26,7 +26,8 @@ export default class GalaxyDetails extends Component {
     }
 
     onClickOpenPlanet = (planetId) => {
-        PlanetsService.updatePlanetStatus(planetId, { status: "open" })
+        const { galaxyId } = this.props.match.params;
+        PlanetsService.updatePlanetStatus(galaxyId, planetId, { status: "open" })
             .then(() => {
                 const planets = this.state.planets.map(planet => {
                     if (planet.id === planetId) {
@@ -35,7 +36,6 @@ export default class GalaxyDetails extends Component {
                     return planet;
                 });
                 this.setState({ planets });
-                const { galaxyId } = this.props.match.params;
                 GalaxiesService.getGalaxyById(galaxyId)
                     .then(galaxy => this.setState({ status: galaxy.status }))
                     .catch(error => console.error('Error fetching galaxy:', error));
@@ -44,7 +44,8 @@ export default class GalaxyDetails extends Component {
     };
 
     onClickCompletePlanet = (planetId) => {
-        PlanetsService.updatePlanetStatus(planetId, { status: "completed" })
+        const { galaxyId } = this.props.match.params;
+        PlanetsService.updatePlanetStatus(galaxyId, planetId, { status: "completed" })
             .then(() => {
                 const planets = this.state.planets.map(planet => {
                     if (planet.id === planetId) {
@@ -53,7 +54,6 @@ export default class GalaxyDetails extends Component {
                     return planet;
                 });
                 this.setState({ planets });
-                const { galaxyId } = this.props.match.params;
                 GalaxiesService.getGalaxyById(galaxyId)
                     .then(galaxy => this.setState({ status: galaxy.status }))
                     .catch(error => console.error('Error fetching galaxy:', error));
@@ -87,7 +87,7 @@ export default class GalaxyDetails extends Component {
                                 <tr>
                                     <th>ID</th>
                                     <th>Name</th>
-                                    <th>Description</th>
+                                    <th>Replicas</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
@@ -98,7 +98,7 @@ export default class GalaxyDetails extends Component {
                                     <tr id={`accordionComments${planet.id}`} className="accordion-item" onClick={() => this.onClickLoadComments(planet.id)}>
                                         <td data-bs-toggle="collapse" data-bs-target={`#collapse-${planet.id}`} aria-expanded="false" aria-controls={`collapse-${planet.id}`}>{planet.id}</td>
                                         <td data-bs-toggle="collapse" data-bs-target={`#collapse-${planet.id}`} aria-expanded="false" aria-controls={`collapse-${planet.id}`}>{planet.name}</td>
-                                        <td data-bs-toggle="collapse" data-bs-target={`#collapse-${planet.id}`} aria-expanded="false" aria-controls={`collapse-${planet.id}`}>{planet.description}</td>
+                                        <td data-bs-toggle="collapse" data-bs-target={`#collapse-${planet.id}`} aria-expanded="false" aria-controls={`collapse-${planet.id}`}>{planet.replicas ?? '-'}</td>
                                         <td data-bs-toggle="collapse" data-bs-target={`#collapse-${planet.id}`} aria-expanded="false" aria-controls={`collapse-${planet.id}`}>{planet.status}</td>
                                         <td>
                                             <button className="btn btn-primary" onClick={() => this.onClickCompletePlanet(planet.id)}>Mark Completed</button>

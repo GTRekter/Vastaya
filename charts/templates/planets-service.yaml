@@ -1,0 +1,22 @@
+{{- if .Values.planets.enabled }}
+{{- $labels := dict "root" . "name" "planets-api" "component" "planets-api" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: planets-svc
+  labels:
+    {{- include "vastaya.standardLabels" $labels | nindent 4 }}
+  {{- with .Values.planets.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.planets.service.type }}
+  selector:
+    {{- include "vastaya.selectorLabels" $labels | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.planets.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}
