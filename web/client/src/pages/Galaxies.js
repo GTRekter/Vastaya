@@ -2,6 +2,10 @@ import React, { Component } from 'react';
 import GalaxiesService from '../services/GalaxiesService';
 import PlanetsService from '../services/PlanetsService';
 import './galaxies.css';
+import PlanetCreationForm from '../components/PlanetCreationForm';
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
+import ConfirmDeletePlanetModal from '../components/ConfirmDeletePlanetModal';
+import TrafficManagerPanel from '../components/TrafficManagerPanel';
 
 import galaxyImage1 from '../images/galaxies/1.png';
 import galaxyImage2 from '../images/galaxies/2.png';
@@ -57,13 +61,21 @@ export default class Galaxies extends Component {
         trafficPanels: {},
         activeTrafficGalaxyId: null,
         activeTrafficPlanetId: null,
-        planetStatusUpdating: {},
+        galaxyDeletion: {},
+        planetDeletion: {},
+        planetDeleteModal: {
+            galaxyId: null,
+            planetId: null,
+            error: null,
+        },
+        isDeleteModalOpen: false,
+        deleteModalGalaxyId: null,
+        deleteModalError: null,
     };
 
     constructor(props) {
         super(props);
         this.onClickViewGalaxy = this.onClickViewGalaxy.bind(this);
-        this.onClickEditGalaxy = this.onClickEditGalaxy.bind(this);
         this.onClickDeleteGalaxy = this.onClickDeleteGalaxy.bind(this);
     }
 
@@ -90,13 +102,120 @@ export default class Galaxies extends Component {
         this.props.history.push(`/galaxies/${galaxyId}`);
     }
 
-    onClickEditGalaxy(galaxyId) {
-        console.log("Edit galaxy", galaxyId);
+    onClickDeleteGalaxy(galaxyId) {
+        if (!galaxyId) {
+            return;
+        }
+
+        this.setState({
+            isDeleteModalOpen: true,
+            deleteModalGalaxyId: galaxyId,
+            deleteModalError: null,
+        });
     }
 
-    onClickDeleteGalaxy(galaxyId) {
-        console.log("Delete galaxy", galaxyId);
-    }
+    closeDeleteModal = () => {
+        const { deleteModalGalaxyId, galaxyDeletion } = this.state;
+        if (deleteModalGalaxyId && galaxyDeletion[deleteModalGalaxyId]) {
+            return;
+        }
+
+        this.setState({
+            isDeleteModalOpen: false,
+            deleteModalGalaxyId: null,
+            deleteModalError: null,
+        });
+    };
+
+    confirmDeleteGalaxy = () => {
+        const { deleteModalGalaxyId } = this.state;
+        if (!deleteModalGalaxyId) {
+            return;
+        }
+
+        const galaxyId = deleteModalGalaxyId;
+
+        this.setState(prevState => ({
+            galaxyDeletion: {
+                ...prevState.galaxyDeletion,
+                [galaxyId]: true,
+            },
+            deleteModalError: null,
+        }));
+
+        GalaxiesService.deleteGalaxy(galaxyId)
+            .then(() => {
+                this.setState(prevState => {
+                    const nextDeletion = { ...prevState.galaxyDeletion };
+                    delete nextDeletion[galaxyId];
+
+                    const nextGalaxies = prevState.galaxies.filter(
+                        (galaxy) => galaxy.id !== galaxyId
+                    );
+
+                    const removedPlanets = prevState.planetsByGalaxy[galaxyId] || [];
+                    const { [galaxyId]: _planets, ...remainingPlanets } =
+                        prevState.planetsByGalaxy;
+                    const { [galaxyId]: _forms, ...remainingForms } =
+                        prevState.planetForms;
+                    const { [galaxyId]: _loading, ...remainingLoading } =
+                        prevState.planetLoading;
+                    const { [galaxyId]: _errors, ...remainingErrors } =
+                        prevState.planetErrors;
+
+                    const nextTrafficPanels = { ...prevState.trafficPanels };
+                    const nextPlanetDeletion = { ...prevState.planetDeletion };
+                    removedPlanets.forEach((planet) => {
+                        if (planet?.id) {
+                            delete nextTrafficPanels[planet.id];
+                            delete nextPlanetDeletion[planet.id];
+                        }
+                    });
+
+                    let activeGalaxyId = prevState.activeGalaxyId;
+                    if (activeGalaxyId === galaxyId) {
+                        activeGalaxyId = null;
+                    }
+
+                    let activeTrafficGalaxyId = prevState.activeTrafficGalaxyId;
+                    let activeTrafficPlanetId = prevState.activeTrafficPlanetId;
+                    if (activeTrafficGalaxyId === galaxyId) {
+                        activeTrafficGalaxyId = null;
+                        activeTrafficPlanetId = null;
+                    }
+
+                    return {
+                        galaxies: nextGalaxies,
+                        galaxyDeletion: nextDeletion,
+                        planetsByGalaxy: remainingPlanets,
+                        planetForms: remainingForms,
+                        planetLoading: remainingLoading,
+                        planetErrors: remainingErrors,
+                        planetDeletion: nextPlanetDeletion,
+                        trafficPanels: nextTrafficPanels,
+                        activeGalaxyId,
+                        activeTrafficGalaxyId,
+                        activeTrafficPlanetId,
+                        isDeleteModalOpen: false,
+                        deleteModalGalaxyId: null,
+                        deleteModalError: null,
+                    };
+                });
+            })
+            .catch((error) => {
+                console.error('Failed to delete galaxy:', error);
+                this.setState(prevState => {
+                    const nextDeletion = { ...prevState.galaxyDeletion };
+                    delete nextDeletion[galaxyId];
+                    return {
+                        galaxyDeletion: nextDeletion,
+                        deleteModalError:
+                            (error && error.message) ||
+                            'Failed to delete galaxy. Please try again.',
+                    };
+                });
+            });
+    };
 
     toggleAccordion = (galaxyId) => {
         this.setState(
@@ -213,6 +332,17 @@ export default class Galaxies extends Component {
 
     handleSelectPlanetForTraffic = (galaxyId, planetId) => {
         if (!galaxyId || !planetId) {
+            return;
+        }
+
+        if (
+            this.state.activeTrafficGalaxyId === galaxyId &&
+            this.state.activeTrafficPlanetId === planetId
+        ) {
+            this.setState({
+                activeTrafficGalaxyId: null,
+                activeTrafficPlanetId: null,
+            });
             return;
         }
 
@@ -439,58 +569,141 @@ export default class Galaxies extends Component {
             });
     };
 
-    handleUpdatePlanetStatus = (galaxyId, planetId, status) => {
-        if (!galaxyId || !planetId || !status) {
+    handleDeletePlanet = (galaxyId, planetId) => {
+        if (!galaxyId || !planetId) {
+            return;
+        }
+
+        const planet = this.getPlanetFromState(galaxyId, planetId);
+        if (!planet) {
+            return;
+        }
+
+        this.setState({
+            planetDeleteModal: {
+                galaxyId,
+                planetId,
+                error: null,
+            },
+        });
+    };
+
+    confirmDeletePlanet = () => {
+        const { planetDeleteModal } = this.state;
+        const galaxyId = planetDeleteModal.galaxyId;
+        const planetId = planetDeleteModal.planetId;
+
+        if (!galaxyId || !planetId) {
             return;
         }
 
         this.setState(prevState => ({
-            planetStatusUpdating: {
-                ...prevState.planetStatusUpdating,
+            planetDeletion: {
+                ...prevState.planetDeletion,
                 [planetId]: true,
             },
             planetErrors: {
                 ...prevState.planetErrors,
                 [galaxyId]: null,
             },
+            planetDeleteModal: {
+                ...prevState.planetDeleteModal,
+                error: null,
+            },
         }));
 
-        PlanetsService.updatePlanetStatus(galaxyId, planetId, { status })
-            .then(updatedPlanet => {
+        PlanetsService.deletePlanet(galaxyId, planetId)
+            .then(() => {
                 this.setState(prevState => {
-                    const planets = (prevState.planetsByGalaxy[galaxyId] || []).map(planet =>
-                        planet.id === planetId ? { ...planet, ...updatedPlanet } : planet
+                    const nextDeletion = { ...prevState.planetDeletion };
+                    delete nextDeletion[planetId];
+
+                    const existingPlanets = prevState.planetsByGalaxy[galaxyId] || [];
+                    const filteredPlanets = existingPlanets.filter(
+                        (planet) => planet.id !== planetId
                     );
-                    const nextStatusUpdating = { ...prevState.planetStatusUpdating };
-                    delete nextStatusUpdating[planetId];
+
+                    const nextPlanetsByGalaxy = {
+                        ...prevState.planetsByGalaxy,
+                        [galaxyId]: filteredPlanets,
+                    };
+
+                    const nextForms = { ...prevState.planetForms };
+                    if (nextForms[galaxyId]) {
+                        nextForms[galaxyId] = {
+                            ...nextForms[galaxyId],
+                            error: null,
+                            isSubmitting: false,
+                        };
+                    }
+
+                    const nextTrafficPanels = { ...prevState.trafficPanels };
+                    delete nextTrafficPanels[planetId];
+
+                    let { activeTrafficGalaxyId, activeTrafficPlanetId } = prevState;
+                    if (
+                        activeTrafficGalaxyId === galaxyId &&
+                        activeTrafficPlanetId === planetId
+                    ) {
+                        activeTrafficGalaxyId = null;
+                        activeTrafficPlanetId = null;
+                    }
+
                     return {
-                        planetsByGalaxy: {
-                            ...prevState.planetsByGalaxy,
-                            [galaxyId]: planets,
-                        },
-                        planetStatusUpdating: nextStatusUpdating,
-                        planetErrors: {
-                            ...prevState.planetErrors,
-                            [galaxyId]: null,
+                        planetDeletion: nextDeletion,
+                        planetsByGalaxy: nextPlanetsByGalaxy,
+                        planetForms: nextForms,
+                        trafficPanels: nextTrafficPanels,
+                        activeTrafficGalaxyId,
+                        activeTrafficPlanetId,
+                        planetDeleteModal: {
+                            galaxyId: null,
+                            planetId: null,
+                            error: null,
                         },
                     };
                 });
             })
             .catch(error => {
+                console.error('Failed to delete planet:', error);
                 this.setState(prevState => {
-                    const nextStatusUpdating = { ...prevState.planetStatusUpdating };
-                    delete nextStatusUpdating[planetId];
+                    const nextDeletion = { ...prevState.planetDeletion };
+                    delete nextDeletion[planetId];
                     return {
-                        planetStatusUpdating: nextStatusUpdating,
+                        planetDeletion: nextDeletion,
                         planetErrors: {
                             ...prevState.planetErrors,
                             [galaxyId]:
                                 (error && error.message) ||
-                                'Failed to update planet status. Please try again.',
+                                'Failed to delete planet. Please try again.',
+                        },
+                        planetDeleteModal: {
+                            galaxyId,
+                            planetId,
+                            error:
+                                (error && error.message) ||
+                                'Failed to delete planet. Please try again.',
                         },
                     };
                 });
             });
+    };
+
+    closeDeletePlanetModal = () => {
+        const { planetDeleteModal, planetDeletion } = this.state;
+        const { planetId } = planetDeleteModal;
+
+        if (planetId && planetDeletion[planetId]) {
+            return;
+        }
+
+        this.setState({
+            planetDeleteModal: {
+                galaxyId: null,
+                planetId: null,
+                error: null,
+            },
+        });
     };
 
     renderTrafficManagerPanel = (galaxyId, planetId) => {
@@ -501,254 +714,18 @@ export default class Galaxies extends Component {
 
         const panel =
             this.state.trafficPanels[planetId] || createDefaultTrafficPanelState();
-        const config = panel.config || createDefaultTrafficConfig();
-        const normalizedProtocol = (config.protocol || 'http').toLowerCase();
-        const isHttpProtocol =
-            normalizedProtocol === 'http' || normalizedProtocol === 'http2';
-        const isHttp2 = normalizedProtocol === 'http2';
-        const status = panel.status;
-        const isRunning = Boolean(status?.active);
-
         return (
-            <div className="card bg-dark border border-secondary mt-4">
-                <div className="card-body text-white">
-                    <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3 mb-3">
-                        <div>
-                            <h4 className="h5 mb-1">
-                                Traffic Manager — {planet.name} ({planet.id})
-                            </h4>
-                            <small className="text-white-50">
-                                Worker service: {planet.serviceName}.{galaxyId}.svc.cluster.local:{' '}
-                                {planet.httpPort}
-                            </small>
-                        </div>
-                        <div className="d-flex gap-2">
-                            <button
-                                type="button"
-                                className="btn btn-outline-light"
-                                disabled={panel.isSubmitting}
-                                onClick={() => this.refreshTrafficStatus(galaxyId, planetId)}
-                            >
-                                {panel.isStatusLoading ? 'Refreshing...' : 'Refresh Status'}
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-success"
-                                disabled={panel.isSubmitting}
-                                onClick={() => this.handleStartTraffic(galaxyId, planetId)}
-                            >
-                                {panel.isSubmitting ? 'Starting...' : 'Start Traffic'}
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-warning"
-                                disabled={panel.isSubmitting || !isRunning}
-                                onClick={() => this.handleStopTraffic(galaxyId, planetId)}
-                            >
-                                {panel.isSubmitting ? 'Stopping...' : 'Stop Traffic'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {panel.error && (
-                        <div className="alert alert-danger py-2" role="alert">
-                            {panel.error}
-                        </div>
-                    )}
-
-                    <div className="row g-3">
-                        <div className="col-12 col-md-4">
-                            <label className="form-label text-white-50">Protocol</label>
-                            <select
-                                className="form-select"
-                                value={config.protocol}
-                                onChange={event =>
-                                    this.handleTrafficConfigChange(
-                                        planetId,
-                                        'protocol',
-                                        event.target.value
-                                    )
-                                }
-                            >
-                                <option value="http">HTTP</option>
-                                <option value="http2">HTTP/2</option>
-                                <option value="grpc">gRPC</option>
-                            </select>
-                        </div>
-                        <div className="col-12 col-md-8">
-                            <label className="form-label text-white-50">Target Endpoint</label>
-                            <input
-                                type="text"
-                                className="form-control"
-                                value={config.target}
-                                onChange={event =>
-                                    this.handleTrafficConfigChange(
-                                        planetId,
-                                        'target',
-                                        event.target.value
-                                    )
-                                }
-                                required
-                            />
-                            <small className="form-text text-white-50">
-                                Use host:port for gRPC targets or a full URL for HTTP-based protocols.
-                            </small>
-                        </div>
-                        <div className="col-12 col-md-4">
-                            <label className="form-label text-white-50">Requests / Second</label>
-                            <input
-                                type="number"
-                                min="0.001"
-                                step="0.001"
-                                className="form-control"
-                                value={config.requestsPerSecond}
-                                onChange={event =>
-                                    this.handleTrafficConfigChange(
-                                        planetId,
-                                        'requestsPerSecond',
-                                        event.target.value
-                                    )
-                                }
-                                required
-                            />
-                        </div>
-                        {isHttpProtocol && (
-                            <div className="col-12 col-md-4">
-                                <label className="form-label text-white-50">HTTP Method</label>
-                                <select
-                                    className="form-select"
-                                    value={config.method}
-                                    onChange={event =>
-                                        this.handleTrafficConfigChange(
-                                            planetId,
-                                            'method',
-                                            event.target.value
-                                        )
-                                    }
-                                >
-                                    <option value="POST">POST</option>
-                                    <option value="GET">GET</option>
-                                    <option value="PUT">PUT</option>
-                                    <option value="PATCH">PATCH</option>
-                                    <option value="DELETE">DELETE</option>
-                                </select>
-                            </div>
-                        )}
-                        <div className={`col-12 col-md-${isHttpProtocol ? '4' : '6'}`}>
-                            <label className="form-label text-white-50">Request Timeout (ms)</label>
-                            <input
-                                type="number"
-                                min="1000"
-                                step="500"
-                                className="form-control"
-                                value={config.requestTimeoutMs}
-                                onChange={event =>
-                                    this.handleTrafficConfigChange(
-                                        planetId,
-                                        'requestTimeoutMs',
-                                        event.target.value
-                                    )
-                                }
-                            />
-                        </div>
-                        <div className="col-12">
-                            <label className="form-label text-white-50">Payload (optional)</label>
-                            <textarea
-                                className="form-control"
-                                rows="3"
-                                value={config.payload}
-                                onChange={event =>
-                                    this.handleTrafficConfigChange(
-                                        planetId,
-                                        'payload',
-                                        event.target.value
-                                    )
-                                }
-                            />
-                        </div>
-                        <div className="col-12">
-                            <label className="form-label text-white-50">
-                                Headers JSON (optional)
-                            </label>
-                            <textarea
-                                className="form-control"
-                                rows="3"
-                                value={config.headersJson}
-                                placeholder='{"X-Example": "value"}'
-                                onChange={event =>
-                                    this.handleTrafficConfigChange(
-                                        planetId,
-                                        'headersJson',
-                                        event.target.value
-                                    )
-                                }
-                            />
-                            <small className="form-text text-white-50">
-                                Provide key/value pairs as a JSON object.
-                            </small>
-                        </div>
-                        {isHttp2 && (
-                            <div className="col-12">
-                                <div className="form-check">
-                                    <input
-                                        className="form-check-input"
-                                        type="checkbox"
-                                        id={`allowInsecure-${planetId}`}
-                                        checked={Boolean(config.allowInsecureHttp2)}
-                                        onChange={event =>
-                                            this.handleTrafficConfigChange(
-                                                planetId,
-                                                'allowInsecureHttp2',
-                                                event.target.checked
-                                            )
-                                        }
-                                    />
-                                    <label
-                                        className="form-check-label text-white-50"
-                                        htmlFor={`allowInsecure-${planetId}`}
-                                    >
-                                        Allow insecure HTTP/2 (skip TLS validation)
-                                    </label>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="mt-4">
-                        <h5 className="h6 text-white-50 text-uppercase">Latest Status</h5>
-                        {panel.isStatusLoading ? (
-                            <p className="text-white-50 mb-0">Loading status...</p>
-                        ) : status ? (
-                            <div className="bg-black bg-opacity-25 rounded-3 p-3">
-                                <div className="d-flex flex-wrap gap-3">
-                                    <span className={`badge ${isRunning ? 'bg-success' : 'bg-secondary'}`}>
-                                        {isRunning ? 'Running' : 'Stopped'}
-                                    </span>
-                                    {status?.config && (
-                                        <span className="text-white-50">
-                                            Target: {status.config.target || 'n/a'}
-                                        </span>
-                                    )}
-                                    {status?.stats && (
-                                        <span className="text-white-50">
-                                            Attempts: {status.stats.totalAttempts ?? 0} · Success:{' '}
-                                            {status.stats.totalSuccess ?? 0} · Errors:{' '}
-                                            {status.stats.totalErrors ?? 0}
-                                        </span>
-                                    )}
-                                </div>
-                                <pre className="mt-3 text-white-50 small overflow-auto">
-{JSON.stringify(status, null, 2)}
-                                </pre>
-                            </div>
-                        ) : (
-                            <p className="text-white-50 mb-0">
-                                No status available yet. Start the traffic generator to view runtime details.
-                            </p>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <TrafficManagerPanel
+                galaxyId={galaxyId}
+                planet={planet}
+                panel={panel}
+                onChange={(field, value) =>
+                    this.handleTrafficConfigChange(planetId, field, value)
+                }
+                onStart={() => this.handleStartTraffic(galaxyId, planetId)}
+                onStop={() => this.handleStopTraffic(galaxyId, planetId)}
+                onRefresh={() => this.refreshTrafficStatus(galaxyId, planetId)}
+            />
         );
     };
 
@@ -971,8 +948,32 @@ export default class Galaxies extends Component {
             trafficPanels,
             activeTrafficGalaxyId,
             activeTrafficPlanetId,
-            planetStatusUpdating,
+            galaxyDeletion,
+            planetDeletion,
+            isDeleteModalOpen,
+            deleteModalGalaxyId,
+            deleteModalError,
+            planetDeleteModal,
         } = this.state;
+
+        const selectedDeleteGalaxy = galaxies.find(
+            (galaxy) => galaxy.id === deleteModalGalaxyId
+        ) || null;
+
+        const isPlanetDeleteModalOpen =
+            Boolean(planetDeleteModal.galaxyId) &&
+            Boolean(planetDeleteModal.planetId);
+        const planetForDeleteModal = isPlanetDeleteModalOpen
+            ? this.getPlanetFromState(
+                  planetDeleteModal.galaxyId,
+                  planetDeleteModal.planetId
+              ) || {
+                  id: planetDeleteModal.planetId || '',
+                  name: planetDeleteModal.planetId || '',
+                  serviceName: '',
+                  spaceportStatus: '',
+              }
+            : null;
 
         return (
             <div className="full-height-container galaxies">
@@ -1002,8 +1003,7 @@ export default class Galaxies extends Component {
                                     const planetError = planetErrors[galaxy.id];
                                     const planetForm =
                                         planetForms[galaxy.id] || createDefaultPlanetForm();
-                                    const planetFormError = planetForm.error;
-                                    const isSubmittingPlanet = planetForm.isSubmitting;
+                                    const isDeletingGalaxy = Boolean(galaxyDeletion[galaxy.id]);
                                     return (
                                         <div className="accordion-item" key={galaxy.id}>
                                             <h2 className="accordion-header">
@@ -1047,17 +1047,11 @@ export default class Galaxies extends Component {
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="btn btn-outline-info"
-                                                                onClick={() => this.onClickEditGalaxy(galaxy.id)}
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                            <button
-                                                                type="button"
                                                                 className="btn btn-outline-danger"
+                                                                disabled={isDeletingGalaxy}
                                                                 onClick={() => this.onClickDeleteGalaxy(galaxy.id)}
                                                             >
-                                                                Delete
+                                                                {isDeletingGalaxy ? 'Deleting...' : 'Delete'}
                                                             </button>
                                                         </div>
                                                         <div>
@@ -1074,13 +1068,14 @@ export default class Galaxies extends Component {
                                                                 planets.length > 0 ? (
                                                                     <>
                                                                         <div className="table-responsive">
-                                                                            <table className="table table-dark table-striped align-middle">
+                                                                        <table className="table table-dark table-striped align-middle">
                                                                                 <thead>
                                                                                     <tr>
                                                                                         <th scope="col">ID</th>
                                                                                         <th scope="col">Name</th>
                                                                                         <th scope="col">Replicas</th>
                                                                                         <th scope="col">Delay (ms)</th>
+                                                                                        <th scope="col">Spaceport</th>
                                                                                         <th scope="col">Status</th>
                                                                                         <th scope="col" className="text-end">Actions</th>
                                                                                     </tr>
@@ -1090,8 +1085,8 @@ export default class Galaxies extends Component {
                                                                                         const isSelected =
                                                                                             activeTrafficGalaxyId === galaxy.id &&
                                                                                             activeTrafficPlanetId === planet.id;
-                                                                                        const isUpdatingStatus = Boolean(
-                                                                                            planetStatusUpdating[planet.id]
+                                                                                        const isDeletingPlanet = Boolean(
+                                                                                            planetDeletion[planet.id]
                                                                                         );
                                                                                         return (
                                                                                             <tr
@@ -1102,6 +1097,16 @@ export default class Galaxies extends Component {
                                                                                                 <td>{planet.name}</td>
                                                                                                 <td>{planet.replicas ?? '-'}</td>
                                                                                                 <td>{planet.responseDelayMs ?? 0}</td>
+                                                                                                <td>
+                                                                                                    <span className="text-capitalize">
+                                                                                                        {planet.spaceportStatus || 'unknown'}
+                                                                                                    </span>
+                                                                                                    <small className="d-block text-white-50">
+                                                                                                        {planet.serviceName
+                                                                                                            ? `${planet.serviceName}.${galaxy.id}.svc`
+                                                                                                            : 'No service'}
+                                                                                                    </small>
+                                                                                                </td>
                                                                                                 <td className="text-capitalize">
                                                                                                     {planet.status || 'unknown'}
                                                                                                 </td>
@@ -1109,7 +1114,13 @@ export default class Galaxies extends Component {
                                                                                                     <div className="btn-group btn-group-sm" role="group">
                                                                                                         <button
                                                                                                             type="button"
-                                                                                                            className="btn btn-outline-light"
+                                                                                                            className={`btn btn-outline-light ${isSelected ? 'active' : ''}`}
+                                                                                                            disabled={
+                                                                                                                isDeletingGalaxy ||
+                                                isDeletingPlanet ||
+                                                (isPlanetDeleteModalOpen &&
+                                                    planetDeleteModal.planetId === planet.id)
+                                            }
                                                                                                             onClick={() =>
                                                                                                                 this.handleSelectPlanetForTraffic(
                                                                                                                     galaxy.id,
@@ -1117,35 +1128,25 @@ export default class Galaxies extends Component {
                                                                                                                 )
                                                                                                             }
                                                                                                         >
-                                                                                                            Configure
-                                                                                                        </button>
-                                                                                                        <button
-                                                                                                            type="button"
-                                                                                                            className="btn btn-outline-success"
-                                                                                                            disabled={isUpdatingStatus}
-                                                                                                            onClick={() =>
-                                                                                                                this.handleUpdatePlanetStatus(
-                                                                                                                    galaxy.id,
-                                                                                                                    planet.id,
-                                                                                                                    'open'
-                                                                                                                )
-                                                                                                            }
-                                                                                                        >
-                                                                                                            {isUpdatingStatus ? 'Saving...' : 'Open'}
+                                                                                                            {isSelected ? 'Hide' : 'Configure'}
                                                                                                         </button>
                                                                                                         <button
                                                                                                             type="button"
                                                                                                             className="btn btn-outline-danger"
-                                                                                                            disabled={isUpdatingStatus}
+                                                                                                            disabled={
+                                                isDeletingGalaxy ||
+                                                isDeletingPlanet ||
+                                                (isPlanetDeleteModalOpen &&
+                                                    planetDeleteModal.planetId === planet.id)
+                                            }
                                                                                                             onClick={() =>
-                                                                                                                this.handleUpdatePlanetStatus(
+                                                                                                                this.handleDeletePlanet(
                                                                                                                     galaxy.id,
-                                                                                                                    planet.id,
-                                                                                                                    'completed'
+                                                                                                                    planet.id
                                                                                                                 )
                                                                                                             }
                                                                                                         >
-                                                                                                            {isUpdatingStatus ? 'Saving...' : 'Complete'}
+                                                                                                            {isDeletingPlanet ? 'Deleting...' : 'Delete'}
                                                                                                         </button>
                                                                                                     </div>
                                                                                                 </td>
@@ -1169,75 +1170,15 @@ export default class Galaxies extends Component {
                                                                     </p>
                                                                 )
                                                             )}
-                                                            <form
-                                                                className="planet-form mt-4"
-                                                                onSubmit={(event) => this.handleCreatePlanet(event, galaxy.id)}
-                                                            >
-                                                                <div className="row g-3 align-items-end">
-                                                                    <div className="col-12 col-lg-4">
-                                                                        <label className="form-label text-white-50">Name</label>
-                                                                        <input
-                                                                            type="text"
-                                                                            className="form-control"
-                                                                            value={planetForm.name}
-                                                                            onChange={event =>
-                                                                                this.handlePlanetFormChange(galaxy.id, 'name', event.target.value)
-                                                                            }
-                                                                            required
-                                                                        />
-                                                                    </div>
-                                                                    <div className="col-12 col-lg-4">
-                                                                        <label className="form-label text-white-50">Replicas</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            min="1"
-                                                                            className="form-control"
-                                                                            value={planetForm.replicas}
-                                                                            onChange={event =>
-                                                                                this.handlePlanetFormChange(galaxy.id, 'replicas', event.target.value)
-                                                                            }
-                                                                            required
-                                                                        />
-                                                                    </div>
-                                                                    <div className="col-12 col-lg-4">
-                                                                        <label className="form-label text-white-50">
-                                                                            Internal Delay (ms)
-                                                                        </label>
-                                                                        <input
-                                                                            type="number"
-                                                                            min="0"
-                                                                            className="form-control"
-                                                                            value={planetForm.internalDelayMs}
-                                                                            onChange={event =>
-                                                                                this.handlePlanetFormChange(
-                                                                                    galaxy.id,
-                                                                                    'internalDelayMs',
-                                                                                    event.target.value
-                                                                                )
-                                                                            }
-                                                                        />
-                                                                        <small className="form-text text-white-50">
-                                                                            Adds latency to every worker response.
-                                                                        </small>
-                                                                    </div>
-                                                                    {planetFormError && (
-                                                                        <div className="col-12">
-                                                                            <div className="alert alert-danger py-2 mb-0" role="alert">
-                                                                                {planetFormError}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                    <div className="col-12">
-                                                                        <button
-                                                                            type="submit"
-                                                                            className="btn btn-primary"
-                                                                            disabled={isSubmittingPlanet}
-                                                                        >
-                                                                            {isSubmittingPlanet ? 'Creating...' : 'Create Planet'}
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            </form>
+                                                            <PlanetCreationForm
+                                                                form={planetForm}
+                                                                onChange={(field, value) =>
+                                                                    this.handlePlanetFormChange(galaxy.id, field, value)
+                                                                }
+                                                                onSubmit={(event) =>
+                                                                    this.handleCreatePlanet(event, galaxy.id)
+                                                                }
+                                                            />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1247,8 +1188,32 @@ export default class Galaxies extends Component {
                                 })
                             )}
                         </div>
-                    </div>
                 </div>
+            </div>
+
+                <ConfirmDeletePlanetModal
+                    planet={planetForDeleteModal}
+                    galaxyId={planetDeleteModal.galaxyId}
+                    isOpen={isPlanetDeleteModalOpen}
+                    isSubmitting={Boolean(
+                        planetDeleteModal.planetId &&
+                        planetDeletion[planetDeleteModal.planetId]
+                    )}
+                    error={planetDeleteModal.error}
+                    onConfirm={this.confirmDeletePlanet}
+                    onCancel={this.closeDeletePlanetModal}
+                />
+
+                <ConfirmDeleteModal
+                    galaxy={selectedDeleteGalaxy}
+                    isOpen={isDeleteModalOpen}
+                    isSubmitting={Boolean(
+                        deleteModalGalaxyId && galaxyDeletion[deleteModalGalaxyId]
+                    )}
+                    error={deleteModalError}
+                    onConfirm={this.confirmDeleteGalaxy}
+                    onCancel={this.closeDeleteModal}
+                />
 
                 {showCreateModal && (
                     <>

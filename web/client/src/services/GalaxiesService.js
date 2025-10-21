@@ -64,5 +64,32 @@ class GalaxiesService {
             throw err;
         });
     }
+    deleteGalaxy(galaxyId){
+        const encodedGalaxy = encodeURIComponent(galaxyId);
+        return fetch(`${process.env.REACT_APP_GALAXIES_API_URL}/${encodedGalaxy}`,{
+            method: 'DELETE',
+            mode: 'cors',
+            headers: {
+                'Accept': 'application/json, text/plain, */*',
+            }
+        })
+        .then(async res => {
+            if (res.status === 204) {
+                return true;
+            }
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                const message =
+                    (data && typeof data.message === 'string' && data.message.trim()) ||
+                    `Failed to delete galaxy ${galaxyId}`;
+                throw new Error(message);
+            }
+            return true;
+        })
+        .catch(err => {
+            console.error(err);
+            throw err;
+        });
+    }
 }
 export default new GalaxiesService();

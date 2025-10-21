@@ -12,8 +12,8 @@ rules:
     verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["configmaps", "services"]
-    verbs: ["get", "list", "create", "patch"]
+    verbs: ["get", "list", "create", "patch", "delete"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "create", "patch"]
+    verbs: ["get", "list", "create", "patch", "delete"]
 {{- end }}

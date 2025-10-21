@@ -23,9 +23,11 @@ const DISPLAY_NAME_ANNOTATION = 'planets.vastaya.dev/display-name';
 const STATUS_KEY = 'status';
 const REPLICAS_KEY = 'replicas';
 const RESPONSE_DELAY_KEY = 'responseDelayMs';
+const SPACEPORT_STATUS_KEY = 'spaceportStatus';
 const DEFAULT_STATUS = 'open';
 const DEFAULT_RESPONSE_DELAY_MS = 0;
 const MAX_RESPONSE_DELAY_MS = 5 * 60 * 1000;
+const DEFAULT_SPACEPORT_STATUS = 'active';
 
 const PLANET_WORKER_IMAGE =
   process.env.PLANET_WORKER_IMAGE || 'planet-worker:latest';
@@ -146,6 +148,12 @@ function configMapToPlanet(configMap) {
   const serviceName = resourceName
     ? `${resourceName}-${PLANET_SERVICE_SUFFIX}`
     : '';
+  const spaceportStatusRaw =
+    (data[SPACEPORT_STATUS_KEY] ?? DEFAULT_SPACEPORT_STATUS).toString();
+  const spaceportStatus =
+    spaceportStatusRaw.trim().length > 0
+      ? spaceportStatusRaw.trim()
+      : DEFAULT_SPACEPORT_STATUS;
 
   return {
     id: resourceName,
@@ -157,6 +165,7 @@ function configMapToPlanet(configMap) {
     httpPort: PLANET_HTTP_PORT,
     grpcPort: PLANET_GRPC_PORT,
     responseDelayMs,
+    spaceportStatus,
   };
 }
 
@@ -166,7 +175,8 @@ async function ensurePlanetConfigMap(
   displayName,
   status,
   replicas,
-  responseDelayMs
+  responseDelayMs,
+  spaceportStatus
 ) {
   const manifest = {
     apiVersion: 'v1',
@@ -182,6 +192,7 @@ async function ensurePlanetConfigMap(
       [STATUS_KEY]: status,
       [REPLICAS_KEY]: String(replicas),
       [RESPONSE_DELAY_KEY]: String(responseDelayMs),
+      [SPACEPORT_STATUS_KEY]: spaceportStatus,
     },
   };
 
@@ -339,6 +350,33 @@ async function ensurePlanetService(galaxyId, resourceName) {
   }
 }
 
+async function deletePlanetResources(galaxyId, planetId) {
+  try {
+    await coreV1Api.deleteNamespacedConfigMap(planetId, galaxyId);
+  } catch (err) {
+    if (!(err.response && err.response.statusCode === 404)) {
+      throw err;
+    }
+  }
+
+  try {
+    await appsV1Api.deleteNamespacedDeployment(planetId, galaxyId);
+  } catch (err) {
+    if (!(err.response && err.response.statusCode === 404)) {
+      throw err;
+    }
+  }
+
+  const serviceName = `${planetId}-${PLANET_SERVICE_SUFFIX}`;
+  try {
+    await coreV1Api.deleteNamespacedService(serviceName, galaxyId);
+  } catch (err) {
+    if (!(err.response && err.response.statusCode === 404)) {
+      throw err;
+    }
+  }
+}
+
 async function listManagedGalaxyNamespaces() {
   const response = await coreV1Api.listNamespace();
   return (response.body?.items ?? []).filter((item) =>
@@ -386,6 +424,7 @@ async function ensurePlanetWorkload({
   status,
   replicas,
   responseDelayMs,
+  spaceportStatus,
 }) {
   await ensurePlanetConfigMap(
     galaxyId,
@@ -393,7 +432,8 @@ async function ensurePlanetWorkload({
     displayName,
     status,
     replicas,
-    responseDelayMs
+    responseDelayMs,
+    spaceportStatus
   );
   await ensurePlanetDeployment(
     galaxyId,
@@ -421,6 +461,7 @@ async function createPlanet(galaxyId, planetInput) {
   const responseDelayMs = sanitizeResponseDelay(
     planetInput.responseDelayMs ?? DEFAULT_RESPONSE_DELAY_MS
   );
+  const spaceportStatus = DEFAULT_SPACEPORT_STATUS;
 
   await ensurePlanetWorkload({
     galaxyId,
@@ -429,6 +470,7 @@ async function createPlanet(galaxyId, planetInput) {
     status,
     replicas,
     responseDelayMs,
+    spaceportStatus,
   });
 
   const configMap = await readPlanetConfigMap(galaxyId, resourceName);
@@ -598,6 +640,12 @@ app.put('/planets/galaxies/:galaxyId/:planetId/status', async (req, res) => {
     const responseDelayMs = sanitizeResponseDelay(
       configMap?.data?.[RESPONSE_DELAY_KEY] ?? DEFAULT_RESPONSE_DELAY_MS
     );
+    const spaceportStatusRaw =
+      (configMap?.data?.[SPACEPORT_STATUS_KEY] ?? DEFAULT_SPACEPORT_STATUS).toString();
+    const spaceportStatus =
+      spaceportStatusRaw.trim().length > 0
+        ? spaceportStatusRaw.trim()
+        : DEFAULT_SPACEPORT_STATUS;
     const displayName =
       configMap?.metadata?.annotations?.[DISPLAY_NAME_ANNOTATION] ??
       configMap?.metadata?.name ??
@@ -610,6 +658,7 @@ app.put('/planets/galaxies/:galaxyId/:planetId/status', async (req, res) => {
       status: sanitizedStatus,
       replicas,
       responseDelayMs,
+      spaceportStatus,
     });
 
     const updated = await readPlanetConfigMap(galaxyId, planetId);
@@ -619,6 +668,39 @@ app.put('/planets/galaxies/:galaxyId/:planetId/status', async (req, res) => {
     res
       .status(500)
       .json({ message: err.message || 'Failed to update planet status' });
+  }
+});
+
+app.delete('/planets/galaxies/:galaxyId/:planetId', async (req, res) => {
+  const { galaxyId, planetId } = req.params;
+
+  if (!isValidNamespaceName(galaxyId)) {
+    return res.status(400).json({
+      message:
+        'Galaxy name must be a valid Kubernetes namespace (lowercase alphanumeric and dashes)',
+    });
+  }
+
+  try {
+    const namespace = await readNamespace(galaxyId);
+
+    if (!namespace || !isManagedGalaxyNamespace(namespace)) {
+      return res.status(404).json({ message: 'Galaxy not found' });
+    }
+
+    const configMap = await readPlanetConfigMap(galaxyId, planetId);
+    if (!configMap) {
+      return res.status(404).json({ message: 'Planet not found' });
+    }
+
+    await deletePlanetResources(galaxyId, planetId);
+    res.status(204).send();
+  } catch (err) {
+    console.error('Failed to delete planet:', err);
+    const statusCode = err.statusCode || err.response?.statusCode || 500;
+    res
+      .status(statusCode)
+      .json({ message: err.message || 'Failed to delete planet' });
   }
 });
 

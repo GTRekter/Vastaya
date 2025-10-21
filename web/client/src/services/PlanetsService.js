@@ -173,5 +173,33 @@ class PlanetsService {
                 throw err;
             });
     }
+    deletePlanet(galaxyId, planetId) {
+        const encodedGalaxy = encodeURIComponent(galaxyId);
+        const encodedPlanet = encodeURIComponent(planetId);
+        return fetch(`${process.env.REACT_APP_PLANETS_API_URL}/galaxies/${encodedGalaxy}/${encodedPlanet}`, {
+            method: 'DELETE',
+            mode: 'cors',
+            headers: {
+                'Accept': 'application/json, text/plain, */*',
+            },
+        })
+            .then(async res => {
+                if (res.status === 204) {
+                    return true;
+                }
+                const data = await res.json().catch(() => null);
+                if (!res.ok) {
+                    const message =
+                        (data && typeof data.message === 'string' && data.message.trim()) ||
+                        `Failed to delete planet ${planetId}`;
+                    throw new Error(message);
+                }
+                return true;
+            })
+            .catch(err => {
+                console.error(err);
+                throw err;
+            });
+    }
 }
 export default new PlanetsService();

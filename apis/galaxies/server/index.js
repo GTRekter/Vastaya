@@ -104,6 +104,7 @@ async function readNamespace(namespaceName) {
     return response.body;
   } catch (err) {
     if (err.response && err.response.statusCode === 403) {
+      err.statusCode = 403;
       throw err;
     }
     if (err.response && err.response.statusCode === 404) {
@@ -166,7 +167,13 @@ app.get('/galaxies/:id', async (req, res) => {
     res.json(namespaceToGalaxy(namespace));
   } catch (err) {
     console.error('Failed to fetch galaxy:', err);
-    res.status(500).json({ message: err.message || 'Failed to fetch galaxy' });
+    const status = err.statusCode || err.response?.statusCode || 500;
+    res.status(status).json({
+      message:
+        status === 403
+          ? 'Galaxies API is not authorized to read namespaces. Ensure RBAC is configured.'
+          : err.message || 'Failed to fetch galaxy',
+    });
   }
 });
 
@@ -253,9 +260,13 @@ app.delete('/galaxies/:id', async (req, res) => {
     res.status(204).send();
   } catch (err) {
     console.error('Failed to delete galaxy:', err);
-    res
-      .status(500)
-      .json({ message: err.message || 'Failed to delete galaxy namespace' });
+    const status = err.statusCode || err.response?.statusCode || 500;
+    res.status(status).json({
+      message:
+        status === 403
+          ? 'Galaxies API is not authorized to delete namespaces. Ensure RBAC allows the delete verb.'
+          : err.message || 'Failed to delete galaxy namespace',
+    });
   }
 });
 
