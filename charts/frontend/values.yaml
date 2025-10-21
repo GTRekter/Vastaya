@@ -1,0 +1,35 @@
+replicaCount: 1
+
+image:
+  repository: vastaya-frontend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: LoadBalancer
+  port: 80
+  annotations: {}
+  targetPort: http
+  nodePort: null
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: Cluster
+
+podAnnotations: {}
+podLabels: {}
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+env:
+  usersUrl: http://users-svc.vastaya.svc.cluster.local:8080
+  galaxiesUrl: http://galaxies-svc.vastaya.svc.cluster.local:8081
+  planetsUrl: http://planets-svc.vastaya.svc.cluster.local:8082
+  commentsUrl: http://comments-svc.vastaya.svc.cluster.local:8083
