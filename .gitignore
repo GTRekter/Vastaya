@@ -1,2 +1,40 @@
-*/node_modules
-*/build
+# OS junk
+.DS_Store
+
+# Dependency directories
+node_modules/
+*/node_modules/
+
+# Build artifacts
+build/
+*/build/
+dist/
+*/dist/
+coverage/
+*/coverage/
+
+# Logs and reports
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+junit.xml
+
+# Environment and local config
+.env
+.env.local
+.env.*.local
+.env.test
+.env.production
+web/client/.env
+web/client/.env.local
+web/client/.env.*
+
+# Tool caches
+.cache/
+*/.cache/
+.parcel-cache
+
+# Cypress artifacts
+cypress/screenshots/
+cypress/videos/

@@ -1,158 +1,124 @@
-# MCP Demo Workspace
+# Vastaya MCP Demo
 
-This repository bundles a small collection of Model Context Protocol (MCP) tooling:
+Vastaya brings together a React-based chat client, a lightweight Express gateway, and sample Model Context Protocol (MCP) servers you can run locally. The web client can talk to MCP servers through either Anthropic or OpenAI models, so you can explore tool calls across providers with the same UI.
 
-- A React client (`web/client`) that can talk to MCP servers through either OpenAI or Anthropic chat completions.
-- A static Node/Express wrapper (`web/server`) for serving the production build of the client.
-- An HTTP-based Weather MCP server implemented in JavaScript (`servers/weather`).
-- An HTTP-based Prometheus metrics MCP server implemented in JavaScript (`servers/prometheus`).
-- A Docker management MCP server implemented in JavaScript (`servers/docker`).
-
-Use the web client to experiment with running either server (or any MCP endpoint you already have) and switch between model providers at runtime.
+![Screenshot of the Vastaya MCP demo](assets/sample.png)
 
 ---
 
-## Repository Layout
+## What’s in the Repository
 
 ```
 web/
-  client/    React SPA that calls MCP servers via Anthropic or OpenAI
-  server/    Express server that serves the built client
+  client/    React SPA that drives the MCP chat experience
+  server/    Express server for production builds and /api proxying
 servers/
-  weather/   Sample MCP server that surfaces National Weather Service data
-  prometheus/ Prometheus metrics MCP server
-  docker/    Docker management MCP server (see its README for details)
+  weather/   HTTP MCP server backed by the National Weather Service API
+  docker/    HTTP MCP server that wraps the local Docker CLI
+web/Dockerfile  Multi-stage build that produces a runnable container image
 ```
 
 ---
 
 ## Prerequisites
 
-- Node.js 18+ and npm (for the React client and JavaScript MCP servers)
-- Python 3.11+ (if you plan to run the Docker MCP server)
-- Docker (optional; required only if you want the Docker MCP server to manage local containers)
-- API keys:
-  - `REACT_APP_ANTHROPIC_API_KEY` for Anthropic (optional if you only use OpenAI)
-  - `REACT_APP_OPENAI_API_KEY` for OpenAI (optional if you only use Anthropic)
+- Node.js 18+ and npm (for the React client and both MCP servers)
+- Docker (only required when you plan to use the Docker MCP server)
+- Anthropic and/or OpenAI API keys:
+  - `REACT_APP_ANTHROPIC_API_KEY`
+  - `REACT_APP_OPENAI_API_KEY`
+
+Both keys are optional individually, but you need at least one to issue model calls from the chat UI.
 
 ---
 
 ## Getting Started
 
-### 1. Configure Environment Variables
+### 1. Configure the Client Environment
 
-Copy `.env.example` from `web/client` if available, or create `web/client/.env.local` with the keys you need:
+Create `web/client/.env` or `web/client/.env.local` with the values you need. The current defaults target the Docker MCP server:
 
 ```ini
-REACT_APP_MCP_SERVER_URL=http://localhost:3001/mcp
+REACT_APP_MCP_SERVER_URL=http://localhost:3002/mcp
 REACT_APP_ANTHROPIC_API_KEY=your-anthropic-key
 REACT_APP_OPENAI_API_KEY=your-openai-key
 ```
 
-If you want to avoid checking keys into version control, place them in `.env.local`. The React app reads both `.env` and `.env.local`.
+If you prefer the Weather MCP server, change the server URL to `http://localhost:3001/mcp`. `.env.local` stays out of version control, so it’s the safest place for secrets.
 
-### 2. Install Client Dependencies
+### 2. Install and Run the React Dev Server
 
 ```bash
 cd web/client
 npm install
-```
-
-### 3. Run the React Dev Server
-
-```bash
 npm start
 ```
 
-The app runs on `http://localhost:3000` and proxies MCP requests to the URL specified by `REACT_APP_MCP_SERVER_URL`. Use the provider dropdown in the footer to switch between Anthropic and OpenAI models.
+The development server runs on `http://localhost:3000`. The chat widget connects to the MCP endpoint set in `REACT_APP_MCP_SERVER_URL`, and you can switch between Anthropic and OpenAI with the provider dropdown inside the app.
 
----
+### 3. Launch an MCP Server
 
-## Sample MCP Servers
+Pick whichever backend you want to explore (running both is fine too):
 
-### Weather MCP Server (JavaScript)
+#### Weather MCP Server
 
 ```bash
 cd servers/weather
-npm install     # installs dependencies (already done once in this repo)
-npm start
+npm install
+npm start    # serves on http://localhost:3001/mcp by default
 ```
 
-By default the server listens on `http://localhost:3001/mcp`, which matches the default `REACT_APP_MCP_SERVER_URL`. It exposes two tools:
+Tools available:
 
-- `get_alerts` – weather alerts by US state code
-- `get_forecast` – forecast by latitude/longitude
+- `get_alerts` — active US weather alerts by two-letter state code
+- `get_forecast` — forecast for a latitude/longitude within the US
 
-### Docker MCP Server (HTTP)
+#### Docker MCP Server
 
 ```bash
 cd servers/docker
 npm install
-npm start
+npm start    # serves on http://localhost:3002/mcp by default
 ```
 
-The Docker server mirrors the weather server’s HTTP layout. It listens on `http://localhost:3002/mcp` by default and exposes tools for listing images/containers, fetching logs, running or stopping containers, pruning resources, and executing `docker compose` subcommands. Point `REACT_APP_MCP_SERVER_URL` at this endpoint if you want the web client to target Docker instead of the weather sample.
-
-Make sure the Docker daemon is running locally and that your user has permission to access it (on Linux, add yourself to the `docker` group and restart your shell session).
-
-### Prometheus MCP Server (HTTP)
-
-```bash
-cd servers/prometheus
-npm install
-PROMETHEUS_URL=http://localhost:9090 npm start
-```
-
-The Prometheus server shares the Docker server’s HTTP transport. It listens on `http://localhost:3003/mcp` by default and expects `PROMETHEUS_URL` (plus any optional auth environment variables) to point at a running Prometheus instance. Use `MCP_HTTP_PORT`, `MCP_HTTP_PATH`, or `MCP_HTTP_ALLOW_ORIGIN` if you need to customise the HTTP endpoint.
-
-Example MCP client entry:
-
-```json
-{
-  "mcpServers": {
-    "prometheus": {
-      "command": "node",
-      "args": [
-        "/ABSOLUTE/PATH/TO/Repositories/MCP/servers/prometheus/index.js"
-      ],
-      "env": {
-        "MCP_HTTP_PORT": "3003",
-        "PROMETHEUS_URL": "http://localhost:9090"
-      }
-    }
-  }
-}
-```
+Tools cover common Docker workflows: list containers/images, fetch logs, run/stop/remove containers, prune resources, inspect objects, and invoke `docker compose` subcommands. Ensure the local Docker daemon is running and your user can access it.
 
 ---
 
-## Building the Client for Production
+## Building for Production
 
-```bash
-cd web/client
-npm run build
-```
+1. Compile the React app:
 
-The static assets end up in `web/client/build`. Serve them locally with:
+   ```bash
+   cd web/client
+   npm run build
+   ```
 
-```bash
-cd web/server
-npm install
-npm start            # serves the ./build directory on port 80 by default
-```
+2. Serve the build with the Express gateway:
 
-You can also containerize the app with `web/Dockerfile`.
+   ```bash
+   cd ../server
+   npm install
+   PORT=8080 node index.js   # change PORT if you prefer
+   ```
+
+   The gateway serves `../build` and exposes `/api` endpoints that proxy to backing services. Override the defaults with environment variables:
+
+   - `GALAXIES_URL` (defaults to `http://galaxies-svc.vastaya.svc.cluster.local:8081`)
+   - `PLANETS_URL` (defaults to `http://planets-svc.vastaya.svc.cluster.local:8082`)
+
+3. Alternatively, build and run the container image defined in `web/Dockerfile`, which bundles the compiled client and the Express gateway in a single image.
 
 ---
 
 ## Tips
 
-- You can run multiple MCP servers simultaneously; point the web client at whichever HTTP endpoint you want to explore by updating `REACT_APP_MCP_SERVER_URL`.
-- The client keeps a per-session conversation history; use the refresh button to clear state and force a new MCP session.
-- When switching model providers, the app cleans up the existing MCP connection to avoid tool-call mixups.
+- The chat keeps the last conversation per provider; use the refresh icon to reset the session when switching contexts.
+- Each provider maintains its own MCP connection. Switching models triggers a clean disconnect/reconnect so tool state stays isolated.
+- You can point the client at any MCP-compliant HTTP endpoint—just update `REACT_APP_MCP_SERVER_URL`.
 
 ---
 
 ## License
 
-See individual project folders for license details (`servers/docker` ships with its own license file). Unless noted otherwise, code in this repository is licensed under the included terms.
+Refer to the individual directories for licensing terms. The Docker MCP server ships with its own license file; the rest of the repository follows the included licenses.
