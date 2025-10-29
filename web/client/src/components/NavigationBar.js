@@ -27,9 +27,6 @@ export default class NavigationBar extends Component {
               <li className="nav-item">
                 <Link className="nav-link" aria-current="page" to='/'>Home</Link>
               </li>
-              <li className="nav-item">
-                <Link className="nav-link" to='/galaxies'>Galaxies</Link>
-              </li>
             </ul>
           </div>
         </div>

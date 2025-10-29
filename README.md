@@ -1,89 +1,158 @@
-# Vastaya Deployment Guide
+# MCP Demo Workspace
 
-This document describes how to deploy the Vastaya React frontend and the Galaxies gRPC API into a local `k3d` Kubernetes cluster using the included Helm charts. The frontend is published through a LoadBalancer, while the Galaxies API remains internal and is accessed through Kubernetes DNS.
+This repository bundles a small collection of Model Context Protocol (MCP) tooling:
+
+- A React client (`web/client`) that can talk to MCP servers through either OpenAI or Anthropic chat completions.
+- A static Node/Express wrapper (`web/server`) for serving the production build of the client.
+- An HTTP-based Weather MCP server implemented in JavaScript (`servers/weather`).
+- An HTTP-based Prometheus metrics MCP server implemented in JavaScript (`servers/prometheus`).
+- A Docker management MCP server implemented in JavaScript (`servers/docker`).
+
+Use the web client to experiment with running either server (or any MCP endpoint you already have) and switch between model providers at runtime.
+
+---
+
+## Repository Layout
+
+```
+web/
+  client/    React SPA that calls MCP servers via Anthropic or OpenAI
+  server/    Express server that serves the built client
+servers/
+  weather/   Sample MCP server that surfaces National Weather Service data
+  prometheus/ Prometheus metrics MCP server
+  docker/    Docker management MCP server (see its README for details)
+```
+
+---
 
 ## Prerequisites
-- Docker
-- `k3d` (v5.0+)
-- `kubectl`
-- `helm` (v3.0+)
-- This repository checked out locally
 
-## Deploy With Helm
+- Node.js 18+ and npm (for the React client and JavaScript MCP servers)
+- Python 3.11+ (if you plan to run the Docker MCP server)
+- Docker (optional; required only if you want the Docker MCP server to manage local containers)
+- API keys:
+  - `REACT_APP_ANTHROPIC_API_KEY` for Anthropic (optional if you only use OpenAI)
+  - `REACT_APP_OPENAI_API_KEY` for OpenAI (optional if you only use Anthropic)
 
-> Replace `vastaya` with a different name if you already use that cluster name.
+---
 
-1. **Create the cluster**
-   ```bash
-   k3d cluster delete vastaya
-   k3d cluster create vastaya \
-     --servers 1 \
-     --agents 2 \
-     --port 8081:80@loadbalancer \
-     --k3s-arg "--disable=traefik@server:0"
-   ```
+## Getting Started
 
-2. **Build the container images**  
-   Run these commands from the repository root so the Docker contexts resolve correctly. If you publish images to a registry instead, adjust the Helm values accordingly.
-   ```bash
-   docker image remove galaxies-api
-   docker image remove planets-api
-   docker image remove planet-worker
-   docker image remove vastaya-frontend
-   docker build -t vastaya-frontend:latest web
-   docker build -t galaxies-api:latest    apis/galaxies/server
-   docker build -t planets-api:latest     apis/planets/server
-   docker build -t planet-worker:latest   apis/planets/worker
-   ```
+### 1. Configure Environment Variables
 
-   > The planet worker is a Node.js 20 service that pulls in gRPC (`@grpc/grpc-js`,
-   > `@grpc/proto-loader`) and HTTP tooling (`express`, `undici`, `cors`, `dotenv`).
-   > Docker installs these automatically, but if you plan to run it locally remember to
-   > run `npm install` inside `apis/planets/worker` before starting the service.
+Copy `.env.example` from `web/client` if available, or create `web/client/.env.local` with the keys you need:
 
-3. **Import the images into k3d**  
-   Skip this step if you pushed the images to a registry that the cluster can reach.
-   ```bash
-   k3d image import -c vastaya \
-     vastaya-frontend:latest \
-     galaxies-api:latest \
-     planets-api:latest \
-     planet-worker:latest
-   ```
-
-   > The Planets API reads the `PLANET_WORKER_IMAGE` environment variable (defaulting to `planet-worker:latest`) when provisioning per-planet workloads. Update it if you push the worker image to a registry.
-
-4. **Install the chart**  
-   Helm will create the `vastaya` namespace automatically. The combined chart deploys the frontend and galaxies API with static object names (`deployment-frontend`, `deployment-galaxies-api`, and their companion Services/RBAC).
-   ```bash
-   helm uninstall -n vastaya vastaya
-   helm upgrade --install vastaya charts/vastaya \
-     --namespace vastaya --create-namespace
-   ```
-
-5. **Watch the rollout**
-   ```bash
-   kubectl get pods,svc -n vastaya
-   ```
-   Wait until every Pod is `Running`. In `k3d`, the `vastaya-frontend` Service may display `<pending>` for the `EXTERNAL-IP`; you can still reach the app through `http://localhost:8081` thanks to the load balancer port mapping. If you prefer to avoid the `<pending>` status, install the chart with `--set frontend.service.type=NodePort --set frontend.service.nodePort=30080` and access it via `http://localhost:30080`. The Planets API and sample worker are exposed via `planets-svc` and `planet-worker-svc`.
-
-6. **Access the UI**  
-   Open http://localhost:8081/ in a browser. The frontend proxies API calls to in-cluster services. Update the Helm values if your API endpoints differ.
-
-## Chart Configuration Highlights
-
-### `charts/vastaya`
-- **frontend.service.type**: Defaults to `LoadBalancer`; switch to `ClusterIP` for internal-only access or use `NodePort` for fixed ports on local clusters.
-- **frontend.env.\***: Override these URLs if the backing APIs use different DNS names or ports.
-- **galaxies.serviceAccount.create / galaxies.rbac.create**: Control whether the chart provisions the namespaces management permissions automatically.
-- **galaxies.env.tasksApiUrl**: Optional gRPC endpoint for the tasks microservice; leave blank to disable cross-service calls.
-- **planets.serviceAccount.create / planets.rbac.create**: Grant the Planets API the ability to manage planet ConfigMaps, Services, and Deployments across namespaces.
-- **planets.env.workerImage / workerHttpPort / workerGrpcPort**: Configure the default worker image and ports that the Planets API provisions for each planet.
-- **planetWorker.enabled**: Deploy a demo worker instance (with configurable env values) that you can target immediately.
-- **frontend.\***, **galaxies.\***, **planets.\***, and **planetWorker.\*** share standard Helm knobs (`image.*`, `resources`, `replicaCount`, `affinity`, etc.) for fine-grained tuning.
-
-## Cleanup
-```bash
-helm uninstall vastaya -n vastaya
-k3d cluster delete vastaya
+```ini
+REACT_APP_MCP_SERVER_URL=http://localhost:3001/mcp
+REACT_APP_ANTHROPIC_API_KEY=your-anthropic-key
+REACT_APP_OPENAI_API_KEY=your-openai-key
 ```
+
+If you want to avoid checking keys into version control, place them in `.env.local`. The React app reads both `.env` and `.env.local`.
+
+### 2. Install Client Dependencies
+
+```bash
+cd web/client
+npm install
+```
+
+### 3. Run the React Dev Server
+
+```bash
+npm start
+```
+
+The app runs on `http://localhost:3000` and proxies MCP requests to the URL specified by `REACT_APP_MCP_SERVER_URL`. Use the provider dropdown in the footer to switch between Anthropic and OpenAI models.
+
+---
+
+## Sample MCP Servers
+
+### Weather MCP Server (JavaScript)
+
+```bash
+cd servers/weather
+npm install     # installs dependencies (already done once in this repo)
+npm start
+```
+
+By default the server listens on `http://localhost:3001/mcp`, which matches the default `REACT_APP_MCP_SERVER_URL`. It exposes two tools:
+
+- `get_alerts` – weather alerts by US state code
+- `get_forecast` – forecast by latitude/longitude
+
+### Docker MCP Server (HTTP)
+
+```bash
+cd servers/docker
+npm install
+npm start
+```
+
+The Docker server mirrors the weather server’s HTTP layout. It listens on `http://localhost:3002/mcp` by default and exposes tools for listing images/containers, fetching logs, running or stopping containers, pruning resources, and executing `docker compose` subcommands. Point `REACT_APP_MCP_SERVER_URL` at this endpoint if you want the web client to target Docker instead of the weather sample.
+
+Make sure the Docker daemon is running locally and that your user has permission to access it (on Linux, add yourself to the `docker` group and restart your shell session).
+
+### Prometheus MCP Server (HTTP)
+
+```bash
+cd servers/prometheus
+npm install
+PROMETHEUS_URL=http://localhost:9090 npm start
+```
+
+The Prometheus server shares the Docker server’s HTTP transport. It listens on `http://localhost:3003/mcp` by default and expects `PROMETHEUS_URL` (plus any optional auth environment variables) to point at a running Prometheus instance. Use `MCP_HTTP_PORT`, `MCP_HTTP_PATH`, or `MCP_HTTP_ALLOW_ORIGIN` if you need to customise the HTTP endpoint.
+
+Example MCP client entry:
+
+```json
+{
+  "mcpServers": {
+    "prometheus": {
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/TO/Repositories/MCP/servers/prometheus/index.js"
+      ],
+      "env": {
+        "MCP_HTTP_PORT": "3003",
+        "PROMETHEUS_URL": "http://localhost:9090"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Building the Client for Production
+
+```bash
+cd web/client
+npm run build
+```
+
+The static assets end up in `web/client/build`. Serve them locally with:
+
+```bash
+cd web/server
+npm install
+npm start            # serves the ./build directory on port 80 by default
+```
+
+You can also containerize the app with `web/Dockerfile`.
+
+---
+
+## Tips
+
+- You can run multiple MCP servers simultaneously; point the web client at whichever HTTP endpoint you want to explore by updating `REACT_APP_MCP_SERVER_URL`.
+- The client keeps a per-session conversation history; use the refresh button to clear state and force a new MCP session.
+- When switching model providers, the app cleans up the existing MCP connection to avoid tool-call mixups.
+
+---
+
+## License
+
+See individual project folders for license details (`servers/docker` ships with its own license file). Unless noted otherwise, code in this repository is licensed under the included terms.
