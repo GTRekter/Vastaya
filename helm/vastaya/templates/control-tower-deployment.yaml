@@ -1,0 +1,45 @@
+{{- if .Values.controlTower.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vastaya.controlTower.name" . }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-tower
+spec:
+  replicas: {{ .Values.controlTower.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vastaya.controlTower.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vastaya.controlTower.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: control-tower
+          image: "{{ .Values.controlTower.image.repository }}:{{ .Values.controlTower.image.tag }}"
+          imagePullPolicy: {{ .Values.controlTower.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.controlTower.service.port }}
+              protocol: TCP
+          env:
+            - name: MCP_SERVER_URL
+              value: {{ printf "http://%s:%d/mcp" (include "vastaya.mcp.name" .) (int .Values.mcp.service.port) | quote }}
+            {{- if and .Values.controlTower.googleApiKey .Values.controlTower.enabled }}
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vastaya.controlTower.secretName" . }}
+                  key: google-api-key
+            {{- end }}
+            {{- range $key, $value := .Values.controlTower.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+{{- end }}

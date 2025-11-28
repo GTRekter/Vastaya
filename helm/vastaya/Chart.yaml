@@ -1,0 +1,6 @@
+apiVersion: v2
+name: vastaya
+description: Helm chart for deploying the Vastaya web app plus Fleet, Universe, Spaceport, and MCP servers.
+type: application
+version: 0.2.0
+appVersion: "1.0.0"

@@ -1,0 +1,72 @@
+{{- if and .Values.web.enabled .Values.web.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "vastaya.web.name" . }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  {{- with .Values.web.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.web.ingress.className }}
+  ingressClassName: {{ .Values.web.ingress.className }}
+  {{- end }}
+  rules:
+    {{- range .Values.web.ingress.hosts }}
+    - host: {{ .host }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "vastaya.web.name" $ }}
+                port:
+                  number: {{ $.Values.web.service.port }}
+          {{- end }}
+          {{- if $.Values.universe.enabled }}
+          - path: /api/universe
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vastaya.universe.name" $ }}
+                port:
+                  number: {{ $.Values.universe.service.port }}
+          {{- end }}
+          {{- if $.Values.fleet.enabled }}
+          - path: /api/fleet
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vastaya.fleet.name" $ }}
+                port:
+                  number: {{ $.Values.fleet.service.port }}
+          {{- end }}
+          {{- if $.Values.spaceport.enabled }}
+          - path: /api/spaceport
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vastaya.spaceport.name" $ }}
+                port:
+                  number: {{ $.Values.spaceport.service.port }}
+          {{- end }}
+          {{- if $.Values.mcp.enabled }}
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vastaya.mcp.name" $ }}
+                port:
+                  number: {{ $.Values.mcp.service.port }}
+          {{- end }}
+    {{- end }}
+  {{- with .Values.web.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

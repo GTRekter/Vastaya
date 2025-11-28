@@ -1,0 +1,44 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vastaya.mcp.name" . }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: {{ .Values.mcp.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vastaya.mcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vastaya.mcp.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mcp
+          image: "{{ .Values.mcp.image.repository }}:{{ .Values.mcp.image.tag }}"
+          imagePullPolicy: {{ .Values.mcp.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.mcp.service.port }}
+              protocol: TCP
+          env:
+            - name: MCP_PORT
+              value: "{{ .Values.mcp.service.port }}"
+            - name: MCP_ALLOW_ORIGINS
+              value: {{ .Values.mcp.allowOrigins | quote }}
+            - name: UNIVERSE_API_BASE_URL
+              value: {{ printf "http://%s:%d/api/universe" (include "vastaya.universe.name" .) (int .Values.universe.service.port) | quote }}
+            - name: FLEET_API_BASE_URL
+              value: {{ printf "http://%s:%d/api/fleet" (include "vastaya.fleet.name" .) (int .Values.fleet.service.port) | quote }}
+            {{- range $key, $value := .Values.mcp.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+{{- end }}

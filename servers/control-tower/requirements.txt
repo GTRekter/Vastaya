@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+google-adk
+openai-agents
+claude-agent-sdk>=0.0.12
+python-dotenv

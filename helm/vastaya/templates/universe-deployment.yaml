@@ -1,0 +1,52 @@
+{{- if .Values.universe.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vastaya.universe.name" . }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: universe
+spec:
+  replicas: {{ .Values.universe.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vastaya.universe.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vastaya.universe.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: universe
+          image: "{{ .Values.universe.image.repository }}:{{ .Values.universe.image.tag }}"
+          imagePullPolicy: {{ .Values.universe.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.universe.service.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "{{ .Values.universe.service.port }}"
+            - name: API_BASE_PATH
+              value: "/api/universe"
+            - name: UNIVERSE_NAMESPACE
+              value: {{ default .Release.Namespace .Values.universe.namespace | quote }}
+            - name: UNIVERSE_APPLY_MODE
+              value: {{ .Values.universe.applyMode | quote }}
+            - name: UNIVERSE_PLANET_IMAGE
+              value: {{ .Values.universe.planetImage | quote }}
+            - name: UNIVERSE_PLANET_PORT
+              value: "{{ .Values.universe.planetPort }}"
+            - name: UNIVERSE_PLANET_SERVICE_PORT
+              value: "{{ .Values.universe.planetServicePort }}"
+            - name: UNIVERSE_BLACK_HOLE_IMAGE
+              value: {{ .Values.universe.blackHoleImage | quote }}
+            {{- range $key, $value := .Values.universe.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+{{- end }}

@@ -1,0 +1,38 @@
+{{- if .Values.web.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vastaya.web.name" . }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vastaya.web.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vastaya.web.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: web
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.service.port }}
+              protocol: TCP
+          env:
+            - name: REACT_APP_UNIVERSE_API_BASE_URL
+              value: {{ printf "http://%s:%d/api/universe" (include "vastaya.universe.name" .) (int .Values.universe.service.port) | quote }}
+            - name: REACT_APP_FLEET_API_BASE_URL
+              value: {{ printf "http://%s:%d/api/fleet" (include "vastaya.fleet.name" .) (int .Values.fleet.service.port) | quote }}
+            - name: REACT_APP_CONTROL_TOWER_URL
+              value: {{ printf "http://%s:%d/chat" (include "vastaya.controlTower.name" .) (int .Values.controlTower.service.port) | quote }}
+{{- end }}

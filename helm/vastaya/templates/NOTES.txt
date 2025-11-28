@@ -1,0 +1,31 @@
+Thank you for deploying Vastaya!
+
+Web gateway service: {{ include "vastaya.web.name" . }}
+{{- if and .Values.web.enabled (eq .Values.web.service.type "LoadBalancer") }}
+  - LoadBalancer: watch for the external IP via `kubectl get svc {{ include "vastaya.web.name" . }} -n {{ .Release.Namespace }}`
+{{- else if and .Values.web.enabled (eq .Values.web.service.type "NodePort") }}
+  - NodePort: access on your node IP at the allocated port shown with `kubectl get svc {{ include "vastaya.web.name" . }} -n {{ .Release.Namespace }}`
+{{- else if and .Values.web.enabled .Values.web.ingress.enabled }}
+  - Ingress: {{- range .Values.web.ingress.hosts }} http://{{ .host }} {{- end }}
+{{- else if .Values.web.enabled }}
+  - ClusterIP: use `kubectl port-forward svc/{{ include "vastaya.web.name" . }} 8080:{{ .Values.web.service.port }} -n {{ .Release.Namespace }}` and open http://localhost:8080
+{{- else }}
+  - Web gateway disabled in values
+{{- end }}
+
+Core services:
+{{- if .Values.universe.enabled }}
+  - Universe API: http://{{ include "vastaya.universe.name" . }}:{{ .Values.universe.service.port }}{{ .Values.universe.apiBasePath }} (ClusterIP)
+{{- end }}
+{{- if .Values.fleet.enabled }}
+  - Fleet API: http://{{ include "vastaya.fleet.name" . }}:{{ .Values.fleet.service.port }}{{ .Values.fleet.apiBasePath }} (ClusterIP)
+{{- end }}
+{{- if .Values.spaceport.enabled }}
+  - Spaceport runtime: http://{{ include "vastaya.spaceport.name" . }}:{{ .Values.spaceport.service.port }} (ClusterIP)
+{{- end }}
+{{- if .Values.mcp.enabled }}
+  - MCP agent: http://{{ include "vastaya.mcp.name" . }}:{{ .Values.mcp.service.port }}{{ .Values.mcp.apiPath }} (ClusterIP)
+{{- end }}
+{{- if .Values.controlTower.enabled }}
+  - Control Tower runtime: http://{{ include "vastaya.controlTower.name" . }}:{{ .Values.controlTower.service.port }}{{ .Values.controlTower.apiPath }} (ClusterIP)
+{{- end }}

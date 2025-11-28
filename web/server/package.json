@@ -1,0 +1,11 @@
+{
+  "name": "vastaya-frontend-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express server that serves the Vastaya React build.",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

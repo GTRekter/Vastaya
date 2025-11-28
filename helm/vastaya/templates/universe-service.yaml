@@ -1,0 +1,18 @@
+{{- if and .Values.universe.enabled .Values.universe.service }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vastaya.universe.name" . }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: universe
+spec:
+  type: {{ .Values.universe.service.type }}
+  ports:
+    - port: {{ .Values.universe.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "vastaya.universe.selectorLabels" . | nindent 4 }}
+{{- end }}

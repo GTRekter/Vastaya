@@ -1,0 +1,18 @@
+{{- if and .Values.fleet.enabled .Values.fleet.service }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vastaya.fleet.name" . }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fleet
+spec:
+  type: {{ .Values.fleet.service.type }}
+  ports:
+    - port: {{ .Values.fleet.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "vastaya.fleet.selectorLabels" . | nindent 4 }}
+{{- end }}

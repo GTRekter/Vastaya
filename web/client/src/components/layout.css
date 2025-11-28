@@ -1,0 +1,3 @@
+.bg-space {
+    background: radial-gradient(circle at top, rgba(78, 94, 255, 0.28), rgba(3, 5, 15, 0.96)), url("../images/background.jpg") center/cover;
+}

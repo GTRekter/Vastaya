@@ -1,0 +1,116 @@
+.full-height-container {
+    min-height: calc(100vh - 190px); /* Use this when the navigationbar is enabled */
+    /* min-height: calc(100vh - 72px); */
+}
+
+.eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-size: 0.75rem;
+    color: #9cb3ff;
+}
+
+.panel-card {
+    background-color: rgba(12, 15, 24, 0.88);
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 1.5rem;
+    box-shadow: 0 20px 60px rgba(3, 6, 12, 0.65);
+}
+
+.panel-card  .control-group {
+    background-color: rgba(255, 255, 255, 0.02);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.badge {
+    border-radius: 0.75rem;
+    border: 1px solid #9cb3ff;
+}
+
+.fleet-plane-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.fleet-plane-card {
+    flex: 1 1 220px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0.85rem;
+    padding: 1rem;
+    text-align: center;
+}
+
+.fleet-plane-card img {
+    max-width: 160px;
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 0.25rem auto 0.75rem;
+    filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.45));
+}
+
+.mission-planet-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0 0.25rem;
+}
+
+.mission-planet-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+.mission-planet-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.mission-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.mission-card {
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mission-card-thumb {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mission-card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mission-card-arrow {
+    color: #9cb3ff;
+    font-size: 1.25rem;
+    line-height: 1;
+}

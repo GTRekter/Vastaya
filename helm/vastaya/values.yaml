@@ -1,0 +1,108 @@
+# Common settings --------------------------------------------------------------
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+# Web frontend (serves the React client) --------------------------------------
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vastaya-web
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: false
+    hosts:
+      - host: vastaya.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+    apiPaths:
+      universe: /api/universe
+      fleet: /api/fleet
+      spaceport: /api/spaceport
+      mcp: /mcp
+  env:
+    REACT_APP_UNIVERSE_API_BASE_URL: http://vastaya-universe:4005/api/universe
+    REACT_APP_FLEET_API_BASE_URL: http://vastaya-fleet:4006/api/fleet
+    REACT_APP_CONTROL_TOWER_URL: http://vastaya-control-tower:3100/chat
+
+# Universe configuration API ---------------------------------------------------
+universe:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vastaya-universe
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4005
+  applyMode: kubectl
+  namespace: ""
+  planetImage: ghcr.io/vastaya/spaceport:latest
+  planetPort: 8080
+  planetServicePort: 80
+  blackHoleImage: bitnami/kubectl:1.29
+  env: {}
+
+# Fleet mission API ------------------------------------------------------------
+fleet:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vastaya-fleet
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4006
+  env: {}
+
+# Spaceport runtime ------------------------------------------------------------
+spaceport:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vastaya-spaceport
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  env: {}
+
+# MCP agent server -------------------------------------------------------------
+mcp:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vastaya-mcp
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3002
+  apiPath: /mcp
+  allowOrigins: "*"
+  env: {}
+  googleApiKey: ""
+
+# Control Tower server ----------------------------------------------------------
+controlTower:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vastaya-control-tower
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3100
+  allowOrigins: "*"
+  env: {}

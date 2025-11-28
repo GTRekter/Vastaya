@@ -1,0 +1,4 @@
+fastmcp
+google-adk
+python-dotenv
+uvicorn

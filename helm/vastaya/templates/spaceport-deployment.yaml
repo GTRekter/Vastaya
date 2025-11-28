@@ -1,0 +1,40 @@
+{{- if .Values.spaceport.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vastaya.spaceport.name" . }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: spaceport
+spec:
+  replicas: {{ .Values.spaceport.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vastaya.spaceport.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vastaya.spaceport.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: spaceport
+          image: "{{ .Values.spaceport.image.repository }}:{{ .Values.spaceport.image.tag }}"
+          imagePullPolicy: {{ .Values.spaceport.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.spaceport.service.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "{{ .Values.spaceport.service.port }}"
+            - name: FLEET_API_BASE_URL
+              value: {{ printf "http://%s:%d/api/fleet" (include "vastaya.fleet.name" .) (int .Values.fleet.service.port) | quote }}
+            {{- range $key, $value := .Values.spaceport.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+{{- end }}
