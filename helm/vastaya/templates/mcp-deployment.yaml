@@ -33,10 +33,19 @@ spec:
               value: "{{ .Values.mcp.service.port }}"
             - name: MCP_ALLOW_ORIGINS
               value: {{ .Values.mcp.allowOrigins | quote }}
+            - name: AGENT_MODEL
+              value: {{ .Values.mcp.agentModel | quote }}
             - name: UNIVERSE_API_BASE_URL
               value: {{ printf "http://%s:%d/api/universe" (include "vastaya.universe.name" .) (int .Values.universe.service.port) | quote }}
             - name: FLEET_API_BASE_URL
               value: {{ printf "http://%s:%d/api/fleet" (include "vastaya.fleet.name" .) (int .Values.fleet.service.port) | quote }}
+            {{- if and .Values.mcp.googleApiKey .Values.mcp.enabled }}
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vastaya.mcp.secretName" . }}
+                  key: google-api-key
+            {{- end }}
             {{- range $key, $value := .Values.mcp.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}

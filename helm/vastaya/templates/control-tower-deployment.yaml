@@ -31,6 +31,8 @@ spec:
           env:
             - name: MCP_SERVER_URL
               value: {{ printf "http://%s:%d/mcp" (include "vastaya.mcp.name" .) (int .Values.mcp.service.port) | quote }}
+            - name: AGENT_MODEL_GOOGLE
+              value: {{ .Values.controlTower.agentModel | quote }}
             {{- if and .Values.controlTower.googleApiKey .Values.controlTower.enabled }}
             - name: GOOGLE_API_KEY
               valueFrom:

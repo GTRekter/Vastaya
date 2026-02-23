@@ -103,6 +103,10 @@ app.kubernetes.io/component: mcp
 app.kubernetes.io/component: control-tower
 {{- end -}}
 
+{{- define "vastaya.mcp.secretName" -}}
+{{- printf "%s-secret" (include "vastaya.mcp.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "vastaya.controlTower.secretName" -}}
 {{- printf "%s-secret" (include "vastaya.controlTower.name" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}

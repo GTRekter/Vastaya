@@ -91,6 +91,7 @@ mcp:
     port: 3002
   apiPath: /mcp
   allowOrigins: "*"
+  agentModel: gemini-2.5-flash
   env: {}
   googleApiKey: ""
 
@@ -106,4 +107,6 @@ controlTower:
     type: ClusterIP
     port: 3100
   allowOrigins: "*"
+  agentModel: gemini-2.5-flash
+  googleApiKey: ""
   env: {}

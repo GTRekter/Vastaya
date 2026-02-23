@@ -14,6 +14,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
 MCP_NAME = "Vastaya Control Tower"
+MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "3002"))
 MCP_ALLOW_ORIGINS = [
     origin.strip()
@@ -199,4 +200,4 @@ def fetch_orders(planet_id: Optional[str] = None) -> str:
     return fleet_tools.fetch_orders(planet_id=planet_id)
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http", port=MCP_PORT, middleware=middleware)
+    mcp.run(transport="streamable-http", host=MCP_HOST, port=MCP_PORT, middleware=middleware)

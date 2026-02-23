@@ -41,7 +41,20 @@ k3d image import --cluster vastaya \
 helm upgrade --install vastaya ./helm/vastaya \
   --namespace vastaya \
   --create-namespace \
-  --set controlTower.googleApiKey=<YOUR_GOOGLE_API_KEY> \
+  --set web.image.repository=vastaya-web \
+  --set web.image.tag=local \
+  --set universe.image.repository=vastaya-universe \
+  --set universe.image.tag=local \
+  --set fleet.image.repository=vastaya-fleet \
+  --set fleet.image.tag=local \
+  --set spaceport.image.repository=vastaya-spaceport \
+  --set spaceport.image.tag=local \
+  --set mcp.image.repository=vastaya-mcp \
+  --set mcp.image.tag=local \
+  --set controlTower.image.repository=vastaya-control-tower \
+  --set controlTower.image.tag=local \
+  --set controlTower.googleApiKey=<YOUR-GOOGLE-API-KEY> \
+  --set mcp.googleApiKey=<YOUR-GOOGLE-API-KEY> \
   --set web.ingress.enabled=true \
   --set 'web.ingress.hosts[0].host=localhost' \
   --set 'web.ingress.hosts[0].paths[0].path=/' \
