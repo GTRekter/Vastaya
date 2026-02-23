@@ -23,7 +23,7 @@ k3d image import --cluster vastaya \
    vastaya-spaceport:local \
    vastaya-fleet:local \
    vastaya-universe:local \
-   vastaya-mcp:local\
+   vastaya-mcp:local \
    vastaya-control-tower:local
 helm upgrade --install vastaya ./helm/vastaya \
   --namespace vastaya \
@@ -40,19 +40,22 @@ helm upgrade --install vastaya ./helm/vastaya \
   --set mcp.image.tag=local \
   --set controlTower.image.repository=vastaya-control-tower \
   --set controlTower.image.tag=local \
-  --set controlTower.googleApiKey=************ \
+  --set controlTower.googleApiKey=YOUR_GOOGLE_API_KEY \
   --set web.ingress.enabled=true \
-  --set 'web.ingress.hosts[0].host=localhost'
+  --set 'web.ingress.hosts[0].host=localhost' \
+  --set 'web.ingress.hosts[0].paths[0].path=/' \
+  --set 'web.ingress.hosts[0].paths[0].pathType=Prefix'
 ```
 
 Open http://localhost:8080 (via the k3d load balancer) or `kubectl -n vastaya port-forward svc/vastaya-web 8080:80` to reach the UI.
 
 ### React front-end (`web/client`)
 
+Requires the Universe, Fleet, Control Tower, and MCP services to be running locally (see sections below). API URLs are configured in `web/client/.env`.
+
 ```bash
-cd servers/client
+cd web/client
 yarn install
-export REACT_APP_UNIVERSE_API_BASE_URL=http://localhost:4005/api/universe
 yarn start
 ```
 
@@ -134,43 +137,98 @@ curl -X POST http://localhost:4006/api/fleet/missions \
       }'
 ```
 
-### Control Tower(`servers/control-tower`)
+### Control Tower (`servers/control-tower`)
 
-This component is in charge of translating the requests from the ReactJS chat componetns to the related LLM and then the MCP.
+Translates chat requests from the React UI to the configured LLM (Google Gemini by default) and routes tool calls through the MCP server.
 
 ```bash
 cd servers/control-tower
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-source .env
+cp .env.example .env  # then fill in your GOOGLE_API_KEY
 uvicorn app:app --port 3100
 ```
 
-### MCP agent (`servers/agent`)
+### MCP agent (`servers/mcp`)
 
-Use the Google ADK web harness to exercise the Vastaya mission-control agent with live Fleet/Universe APIs. The MCP server listens on port 3002 by default so it can run alongside the React dev server that occupies port 3000; override `MCP_PORT` if you need a different port.
+Hosts the FastMCP server and Google ADK agents (fleet and universe). Listens on port 3002 by default so it can run alongside the React dev server on port 3000; override `MCP_PORT` if needed.
 
 ```bash
 cd servers/mcp
 python3 -m venv .venv && source .venv/bin/activate
-pip install google-adk
+pip install -r requirements.txt
+# copy and fill in GOOGLE_API_KEY for each sub-agent
+cp fleet_agent/.env.example fleet_agent/.env
+cp universe_agent/.env.example universe_agent/.env
 python3 server.py
 ```
 
-From the repo root, load your env and launch the ADK web tester pointed at our root agent:
+To exercise the agents interactively with the Google ADK web harness:
 
 ```bash
-source .env
+cd servers/mcp
+source fleet_agent/.env
 adk web
 ```
 
-Open the printed URL in your browser and issue queries such as “List the current missions”, “Create a mission from planet-a to planet-b at 200 RPS”, or “Destroy all planets”. Each tool call will hit the local FastAPI services, so you can watch the logs to confirm end-to-end wiring.
+Open the printed URL and issue queries such as “List the current missions”, “Create a mission from planet-a to planet-b at 200 RPS”, or “Destroy all planets”. Each tool call hits the local FastAPI services.
 
 #### MCP resources
 
-- The MCP server now exposes `vastaya://planets`, returning the live planet list from the universe API.
+- The MCP server exposes `vastaya://planets`, returning the live planet list from the Universe API.
 - Local MCP-aware clients (e.g., Claude Desktop or the `use-mcp` hook) can auto-register the server via `.mcp/servers.json`. If your client supports it, point it at that file or copy the entry; it starts `python3 servers/mcp/server.py` with the correct env defaults.
-- When using the Anthropic provider through `servers/chat_gateway`, ensure `claude-agent-sdk>=0.0.12` so MCP tool support is available. After upgrading, restart the chat gateway.
+
+---
+
+## Architecture & Service Dependencies
+
+### Service map
+
+```
+Browser
+  │
+  │  HTTP (port 8080 via K3D load balancer)
+  ▼
+Ingress (Traefik)
+  ├── /              → vastaya-web       :80    React SPA + Express
+  ├── /api/universe  → vastaya-universe  :4005  Universe config API
+  ├── /api/fleet     → vastaya-fleet     :4006  Fleet mission API
+  ├── /api/spaceport → vastaya-spaceport :8080  Spaceport runtime
+  ├── /mcp           → vastaya-mcp       :3002  MCP agent server
+  └── /chat          → vastaya-control-tower :3100  LLM gateway
+```
+
+### Call graph
+
+```
+React UI
+  ├── GET/POST /api/universe  ──────────────────────────► Universe API
+  ├── GET/POST /api/fleet     ──────────────────────────► Fleet API
+  └── POST     /chat          ──► Control Tower
+                                      │ sync / streaming
+                                      ▼
+                                  MCP Server
+                                  ├── universe_agent ──► Universe API
+                                  └── fleet_agent    ──► Fleet API
+
+Spaceport (each planet instance)
+  ├── polls GET /api/fleet/orders  ──► Fleet API   (async, every 5 s)
+  └── POST  /dock                  ──► other Spaceport instances
+```
+
+### Coupling table
+
+| Caller | Callee | Style | Timeout | Fails if callee is down? |
+|---|---|---|---|---|
+| Control Tower | MCP Server | sync / streaming | none | yes — chat unavailable |
+| MCP Server | Universe API | sync | 10 s | yes — universe tools fail |
+| MCP Server | Fleet API | sync | 10 s | yes — fleet tools fail |
+| Spaceport | Fleet API | async polling | 5 s | no — logs error, retries |
+| Spaceport | Other planets | async burst | 5–60 s | no — per-burst failure logged |
+
+**Universe API** and **Fleet API** are fully self-contained — they make no outbound calls and can run independently of every other service.
+
+The tight chain **Control Tower → MCP → APIs** is intrinsic to the agentic tool-calling pattern: the LLM must wait for tool results before it can respond. Adding timeouts and circuit breakers on the MCP → API calls is the most impactful hardening step for production use.
 
 ---
 

@@ -64,6 +64,15 @@ spec:
                 port:
                   number: {{ $.Values.mcp.service.port }}
           {{- end }}
+          {{- if $.Values.controlTower.enabled }}
+          - path: /chat
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vastaya.controlTower.name" $ }}
+                port:
+                  number: {{ $.Values.controlTower.service.port }}
+          {{- end }}
     {{- end }}
   {{- with .Values.web.ingress.tls }}
   tls:
