@@ -1,0 +1,79 @@
+{{- if .Values.universe.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "vastaya.universe.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: universe
+---
+# Cluster-scoped: needed to create/patch the vastaya Namespace itself
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "vastaya.universe.name" . }}-namespace
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: universe
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "vastaya.universe.name" . }}-namespace
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: universe
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "vastaya.universe.name" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "vastaya.universe.name" . }}-namespace
+  apiGroup: rbac.authorization.k8s.io
+---
+# Namespace-scoped: Deployments, Services, Jobs, HTTPRoutes
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "vastaya.universe.name" . }}-workloads
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: universe
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "vastaya.universe.name" . }}-workloads
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: universe
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "vastaya.universe.name" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "vastaya.universe.name" . }}-workloads
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

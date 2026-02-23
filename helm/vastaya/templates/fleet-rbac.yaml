@@ -1,0 +1,43 @@
+{{- if .Values.fleet.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "vastaya.fleet.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fleet
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "vastaya.fleet.name" . }}-logs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fleet
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "vastaya.fleet.name" . }}-logs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vastaya.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fleet
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "vastaya.fleet.name" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "vastaya.fleet.name" . }}-logs
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

@@ -5,32 +5,41 @@
 
 from __future__ import annotations
 from collections.abc import Mapping
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
+import json
+import logging
+import os
+import sys
+
+# ---------------------------------------------------------------------------
+# sys.path fix: move the app directory to the END of the search path so that
+# `import kubernetes` resolves to the installed third-party package before
+# it can accidentally find our local kubernetes.py and cause a circular import.
+# This must happen before any kubernetes-related imports.
+# ---------------------------------------------------------------------------
+_here = str(Path(__file__).resolve().parent)
+for _p in ("", _here):
+    while _p in sys.path:
+        sys.path.remove(_p)
+    sys.path.append(_p)
+
 from fastapi import APIRouter, Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-import json
-import os
+
 try:
     from .kubernetes import generate_apply_artifacts
-except ImportError:  # pragma: no cover - fallback when running as script or in a flattened container
-    import sys
-    from pathlib import Path
-
-    repo_root = Path(__file__).resolve().parent
-    # Add the current directory so `import kubernetes` works when this file is executed directly.
-    if str(repo_root) not in sys.path:
-        sys.path.append(str(repo_root))
-    try:
-        from kubernetes import generate_apply_artifacts  # type: ignore
-    except ImportError:
-        # As a last resort, try the original package-style import when repo layout is preserved.
-        parent = repo_root.parent
-        if str(parent) not in sys.path:
-            sys.path.append(str(parent))
-        from servers.universe.kubernetes import generate_apply_artifacts  # type: ignore
+except ImportError:  # pragma: no cover - running as a flat module (container)
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location(
+        "universe_k8s", Path(__file__).resolve().parent / "kubernetes.py"
+    )
+    _mod = _ilu.module_from_spec(_spec)  # type: ignore[arg-type]
+    _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+    generate_apply_artifacts = _mod.generate_apply_artifacts
 
 # =====================================================
 # =============== GLOBAL CONFIGURATION ================
@@ -42,6 +51,27 @@ DATA_FILE = Path(__file__).with_name("universe-state.json")
 PORT = int(os.environ.get("PORT", "4005"))
 # Base path for API routing
 API_BASE = os.environ.get("API_BASE_PATH", "/api/universe")
+
+# Default planet configuration applied automatically on first boot so that
+# fleet missions can reference planets without requiring a manual UI step.
+DEFAULT_BOOTSTRAP_CONFIG: Dict[str, Any] = {
+    "planets": [
+        {"id": "planet-a", "code": "A", "displayName": "Planet A", "type": "trade",   "description": "High-throughput, stateless service"},
+        {"id": "planet-b", "code": "B", "displayName": "Planet B", "type": "archive", "description": "Slow, high-latency storage nodes"},
+        {"id": "planet-c", "code": "C", "displayName": "Planet C", "type": "research","description": "Flaky service that injects failures"},
+        {"id": "planet-d", "code": "D", "displayName": "Planet D", "type": "resort",  "description": "Low traffic most days with dramatic spikes"},
+    ],
+    "crossGalaxyEnabled": False,
+    "wormholesEnabled": False,
+    "wormholeInstability": 0,
+    "nebulaEnabled": False,
+    "nebulaDensity": 0,
+    "shieldsEnabled": False,
+    "blackHoleEnabled": False,
+    "chaosExperimentsEnabled": False,
+}
+
+logger = logging.getLogger("uvicorn.error")
 
 # =====================================================
 # ====================== MODELS ========================
@@ -112,7 +142,30 @@ def persist_state(state: UniverseState) -> None:
 # =====================================================
 
 universe_state = load_state()
-app = FastAPI(title="Universe configuration API")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """On first boot (no config ever applied) auto-apply the default planet set."""
+    global universe_state
+    if universe_state.lastAppliedAt is None and not universe_state.config:
+        logger.info("No universe config applied yet — bootstrapping default planets.")
+        applied_at = iso_now()
+        try:
+            generate_apply_artifacts(DEFAULT_BOOTSTRAP_CONFIG)
+            universe_state = UniverseState(
+                config=DEFAULT_BOOTSTRAP_CONFIG,
+                lastUpdatedAt=applied_at,
+                lastAppliedAt=applied_at,
+            )
+            persist_state(universe_state)
+            logger.info("Bootstrap complete.")
+        except Exception as exc:
+            logger.error("Bootstrap apply failed: %s", exc, exc_info=True)
+    yield
+
+
+app = FastAPI(title="Universe configuration API", lifespan=lifespan)
 # CORS configuration: allow all (customizable as needed)
 app.add_middleware(
     CORSMiddleware,

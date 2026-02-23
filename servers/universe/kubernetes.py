@@ -4,8 +4,12 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 import os
 import re
-import subprocess
 import yaml
+
+import kubernetes.client as k8s_client
+import kubernetes.config as k8s_config
+from kubernetes.dynamic import DynamicClient
+from kubernetes.dynamic.exceptions import DynamicApiError
 
 PLACEHOLDER_IMAGE = os.environ.get("UNIVERSE_PLANET_IMAGE","spaceport:latest")
 CONTAINER_PORT = int(os.environ.get("UNIVERSE_PLANET_PORT", "8080"))
@@ -13,6 +17,7 @@ SERVICE_PORT = int(os.environ.get("UNIVERSE_PLANET_SERVICE_PORT", "80"))
 NAMESPACE = os.environ.get("UNIVERSE_NAMESPACE", "vastaya")
 BLACK_HOLE_JOB_IMAGE = os.environ.get("UNIVERSE_BLACK_HOLE_IMAGE", "bitnami/kubectl:1.29")
 APPLY_MODE = os.environ.get("UNIVERSE_APPLY_MODE", "kubectl").strip().lower()
+FLEET_API_URL = os.environ.get("UNIVERSE_FLEET_API_URL", f"http://vastaya-fleet.{NAMESPACE}:4006/api/fleet")
 _DRY_RUN_MODES = {"dry-run", "skip", "manifest", "noop"}
 
 ENV_FIELD_MAP: Dict[str, str] = {
@@ -91,6 +96,7 @@ def build_deployment(
     container_env = list(env)
     planet_identifier = str(planet.get("id") or planet.get("code") or "planet")
     container_env.append({"name": "PLANET_ID", "value": planet_identifier})
+    container_env.append({"name": "FLEET_API_BASE_URL", "value": FLEET_API_URL})
     pod_metadata = {"labels": labels}
     if shields_enabled:
         pod_metadata["annotations"] = {"linkerd.io/inject": "enabled"}
@@ -241,32 +247,60 @@ def build_http_route(
     }
 
 
+def _k8s_dynamic_client() -> DynamicClient:
+    """Return a Kubernetes DynamicClient using in-cluster config or local kubeconfig."""
+    try:
+        k8s_config.load_incluster_config()
+    except k8s_config.ConfigException:
+        k8s_config.load_kube_config()
+    return DynamicClient(k8s_client.ApiClient())
+
+
+def _apply_one(dyn: DynamicClient, resource: Dict[str, Any]) -> str:
+    """Create or patch a single Kubernetes resource dict. Returns a status line."""
+    api_version = resource.get("apiVersion", "v1")
+    kind = resource.get("kind", "Unknown")
+    meta = resource.get("metadata", {})
+    name = meta.get("name", "?")
+    namespace = meta.get("namespace")
+
+    try:
+        res_api = dyn.resources.get(api_version=api_version, kind=kind)
+    except Exception as exc:
+        return f"{kind}/{name} skip (unsupported): {exc}"
+
+    try:
+        res_api.get(name=name, namespace=namespace)
+        res_api.patch(body=resource, name=name, namespace=namespace)
+        return f"{kind}/{name} configured"
+    except DynamicApiError as exc:
+        if exc.status == 404:
+            res_api.create(body=resource, namespace=namespace)
+            return f"{kind}/{name} created"
+        return f"{kind}/{name} error: {exc}"
+    except Exception as exc:
+        return f"{kind}/{name} error: {exc}"
+
+
 def _apply_resources(resources: List[Dict[str, Any]]) -> Tuple[str, str, bool]:
     """
     Apply the rendered manifests unless UNIVERSE_APPLY_MODE disables it.
 
-    Returns (kubectl_output, manifest_yaml, applied_flag).
+    Returns (apply_output, manifest_yaml, applied_flag).
     """
     manifest = yaml.safe_dump_all(resources, sort_keys=False)
     mode = APPLY_MODE or "kubectl"
     if mode in _DRY_RUN_MODES:
         message = f"kubectl apply skipped (UNIVERSE_APPLY_MODE={mode})."
         return message, manifest, False
+
     try:
-        result = subprocess.run(
-            ["kubectl", "apply", "-f", "-"],
-            input=manifest.encode("utf-8"),
-            capture_output=True,
-            check=False,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError("kubectl is not installed or not on PATH.") from exc
-    if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8", errors="ignore").strip()
-        stdout = result.stdout.decode("utf-8", errors="ignore").strip()
-        details = stderr or stdout or "kubectl apply failed without output."
-        raise RuntimeError(details)
-    output = result.stdout.decode("utf-8", errors="ignore").strip() or "kubectl apply completed."
+        dyn = _k8s_dynamic_client()
+    except Exception as exc:
+        raise RuntimeError(f"Failed to initialise Kubernetes client: {exc}") from exc
+
+    messages: List[str] = [_apply_one(dyn, r) for r in resources]
+    output = "\n".join(messages)
     return output, manifest, True
 
 
@@ -332,7 +366,7 @@ def generate_apply_artifacts(config: Mapping[str, Any]) -> Dict[str, Any]:
         resources = [build_namespace()] + workloads
         kubectl_output, manifest_yaml, applied = _apply_resources(resources)
         operation_msgs.append(
-            "Applied generated manifests via kubectl." if applied else kubectl_output
+            "Applied generated manifests." if applied else kubectl_output
         )
 
     return {

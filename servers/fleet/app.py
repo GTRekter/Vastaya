@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Dict, List, Mapping
 import json
 import os
+import re
 import uuid
+
+from kubernetes import client as k8s_client, config as k8s_config
 
 from fastapi import APIRouter, Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +19,7 @@ from pydantic import BaseModel, Field, model_validator
 DATA_FILE = Path(__file__).with_name("fleet-state.json")
 PORT = int(os.environ.get("PORT", "4006"))
 API_BASE_PATH = os.environ.get("FLEET_API_BASE_PATH", "/api/fleet")
+UNIVERSE_NAMESPACE = os.environ.get("UNIVERSE_NAMESPACE", "vastaya")
 
 
 def iso_now() -> str:
@@ -171,6 +175,56 @@ async def terminate_mission(mission_id: str) -> Mission:
     updated_list = [updated if item.id == mission_id else item for item in fleet_state.missions]
     replace_state(updated_list)
     return updated
+
+
+def _planet_slug(planet_id: str) -> str:
+    """Convert a planet id to a Kubernetes-safe label value (mirrors universe/kubernetes.py)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", planet_id.lower()).strip("-")
+    return slug or "planet"
+
+
+def _k8s_core_v1() -> k8s_client.CoreV1Api:
+    """Return a Kubernetes CoreV1Api, loading in-cluster config or local kubeconfig."""
+    try:
+        k8s_config.load_incluster_config()
+    except k8s_config.ConfigException:
+        k8s_config.load_kube_config()
+    return k8s_client.CoreV1Api()
+
+
+@router.get("/missions/{mission_id}/logs")
+async def get_mission_logs(mission_id: str) -> dict:
+    """Return recent pod logs for the planets involved in a mission."""
+    mission = _get_mission(mission_id)
+    lines: List[dict] = []
+
+    try:
+        v1 = _k8s_core_v1()
+    except Exception as exc:
+        return {"lines": [{"source": "system", "role": "system", "text": f"[k8s config error: {exc}]"}], "missionId": mission_id}
+
+    for endpoint, role in [(mission.source, "source"), (mission.destination, "destination")]:
+        planet_slug = _planet_slug(endpoint.id)
+        label_selector = f"universe.vastaya.dev/planet={planet_slug}"
+        display = endpoint.displayName or endpoint.id
+        try:
+            pod_list = v1.list_namespaced_pod(namespace=UNIVERSE_NAMESPACE, label_selector=label_selector)
+            if not pod_list.items:
+                lines.append({"source": display, "role": role, "text": f"[no pods found matching {label_selector}]"})
+                continue
+            for pod in pod_list.items:
+                log_text = v1.read_namespaced_pod_log(
+                    name=pod.metadata.name,
+                    namespace=UNIVERSE_NAMESPACE,
+                    tail_lines=50,
+                    timestamps=True,
+                ) or ""
+                for raw in log_text.splitlines():
+                    lines.append({"source": display, "role": role, "text": raw})
+        except Exception as exc:
+            lines.append({"source": display, "role": role, "text": f"[error: {exc}]"})
+
+    return {"lines": lines, "missionId": mission_id}
 
 
 @router.get("/orders", response_model=MissionList)

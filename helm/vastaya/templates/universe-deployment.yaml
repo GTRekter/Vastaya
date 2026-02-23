@@ -20,6 +20,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      serviceAccountName: {{ include "vastaya.universe.name" . }}
       containers:
         - name: universe
           image: "{{ .Values.universe.image.repository }}:{{ .Values.universe.image.tag }}"
@@ -45,6 +46,8 @@ spec:
               value: "{{ .Values.universe.planetServicePort }}"
             - name: UNIVERSE_BLACK_HOLE_IMAGE
               value: {{ .Values.universe.blackHoleImage | quote }}
+            - name: UNIVERSE_FLEET_API_URL
+              value: {{ .Values.universe.fleetApiUrl | quote }}
             {{- range $key, $value := .Values.universe.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}

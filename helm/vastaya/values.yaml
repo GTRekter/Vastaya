@@ -45,10 +45,11 @@ universe:
     port: 4005
   applyMode: kubectl
   namespace: ""
-  planetImage: ghcr.io/vastaya/spaceport:latest
+  planetImage: vastaya-spaceport:local
   planetPort: 8080
   planetServicePort: 80
   blackHoleImage: bitnami/kubectl:1.29
+  fleetApiUrl: "http://vastaya-fleet:4006/api/fleet"
   env: {}
 
 # Fleet mission API ------------------------------------------------------------

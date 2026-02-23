@@ -114,3 +114,27 @@
     font-size: 1.25rem;
     line-height: 1;
 }
+
+.mission-logs-terminal {
+    background: #070a10;
+    border: 1px solid rgba(156, 179, 255, 0.15);
+    border-radius: 0.5rem;
+    padding: 0.65rem 0.9rem;
+    max-height: 220px;
+    overflow-y: auto;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.72rem;
+    line-height: 1.55;
+}
+
+.mission-log-line {
+    color: rgba(255, 255, 255, 0.7);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-source {
+    color: #9cb3ff;
+    font-weight: 600;
+    user-select: none;
+}

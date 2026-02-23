@@ -51,3 +51,10 @@ export async function terminateMission(missionId, options = {}) {
         signal: options.signal,
     });
 }
+
+export async function fetchMissionLogs(missionId, options = {}) {
+    return request(`/missions/${missionId}/logs`, {
+        method: 'GET',
+        signal: options.signal,
+    });
+}

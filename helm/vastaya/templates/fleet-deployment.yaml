@@ -20,6 +20,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      serviceAccountName: {{ include "vastaya.fleet.name" . }}
       containers:
         - name: fleet
           image: "{{ .Values.fleet.image.repository }}:{{ .Values.fleet.image.tag }}"
