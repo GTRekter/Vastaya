@@ -6,6 +6,105 @@ Vastaya is a Kubernetes-native demo platform that simulates an interplanetary tr
 
 ---
 
+## Concepts
+
+### The Universe
+
+The Universe is the top-level configuration object that defines everything running in the cluster. It is a single JSON document managed by the Universe API (`servers/universe`) and edited through the **Universe Builder** tab in the UI. The document contains the list of planets to deploy, universe-wide feature flags (wormholes, shields, cross-galaxy networking mode), and chaos settings that are injected into each planet pod as environment variables.
+
+Changes to the Universe are staged locally and do not take effect until you click **Apply**. When applied, the Universe API renders the configuration into Kubernetes Deployments and Services and sends them to the cluster via `kubectl apply`. Removing a planet from the list tears down its Deployment and Service.
+
+On first boot the Universe API detects that no configuration has been applied and automatically deploys all four planets using the default settings, so missions can be launched straight away without a manual Apply.
+
+### Planets
+
+Each planet is a Kubernetes Deployment running the Spaceport runtime (`servers/spaceport`). The four planets represent archetypal distributed services with deliberately different traffic behaviours:
+
+| Planet | Type | What it models |
+|---|---|---|
+| **Planet A** | Trade Hub | A high-throughput, stateless service. No artificial latency or failure injection — requests are processed as fast as the runtime allows. |
+| **Planet B** | Archive World | A slow storage node. Nebula latency is enabled by default, adding hundreds of milliseconds to every response to simulate a database or object-store backend. |
+| **Planet C** | Experimental Research | A flaky service. Chaos injection is enabled by default, causing a configurable fraction of incoming requests (18 % by default) to return HTTP 500, so you can observe error rates and retry behaviour. |
+| **Planet D** | Resort Planet | A bursty, low-volume service that mimics a workload with sporadic traffic spikes rather than a steady baseline. |
+
+When a planet pod starts it launches a background polling loop that calls `GET /api/fleet/orders?planetId=<id>` on the Fleet API every 5 seconds. The response is the set of currently actionable missions where this planet is the source. The pod reconciles that list with its running traffic streams: it starts a new stream for any mission that has appeared, restarts a stream whose parameters changed, and stops any stream whose mission is no longer actionable.
+
+Chaos and nebula effects are applied as HTTP middleware to every non-health request the planet receives — including docking requests from other planets. This means that if Planet C is the destination, 18 % of each incoming burst of requests will fail with a 500, regardless of which planet sent them.
+
+### Missions
+
+A mission drives synthetic HTTP traffic from one planet (the source) to another (the destination) at a configured rate and speed profile.
+
+#### Creating a mission
+
+When you create a mission you specify:
+
+- **Source / Destination** — any two planets in the universe (they can be the same planet).
+- **RPS** — target requests per second the source should aim to emit toward the destination.
+- **Speed** — controls how traffic is shaped into bursts:
+  - `cruise` — steady, predictable flow. Burst size ≈ 1× RPS, cooldown ≈ 1 s. Produces a flat, uniform request rate.
+  - `warp` — high-intensity bursts. Burst size 1.75–3× RPS, cooldown 1.2–2.4 s. Sends large simultaneous waves with longer pauses between them.
+  - `chaotic` — unpredictable. Burst size 0.35–4× RPS, cooldown 0.35–1.5 s. Useful for generating spiky, noisy traffic.
+
+The Fleet API assigns the mission a UUID, sets its `status` to `scheduled`, and persists it to disk (`fleet-state.json`). The mission record is returned immediately but no traffic flows yet.
+
+Within 5 seconds the source planet's polling loop picks up the new mission from `/orders`. It starts an async load-streaming task that runs a continuous burst-and-cooldown loop: each iteration fires `burst_size` concurrent HTTP `POST /dock` requests to the destination planet, waits for the cooldown period, then repeats. Each docking request carries a randomly generated cargo manifest (2–4 line items chosen from a fixed catalogue: fusion cores, quantum relays, hydroponic seeds, and so on).
+
+The destination planet receives each `POST /dock`, simulates 3–6 docking operations in sequence (requesting clearance, aligning cargo bay doors, signing the customs ledger, etc., each taking 0.2–1.5 s), and returns a response summarising what was processed. If nebula latency or chaos injection is enabled on the destination, those effects are applied to the docking requests before the handler runs.
+
+#### Terminating a mission
+
+Terminating a mission sets its `status` to `terminated` in the Fleet API's persisted state. Terminated missions are excluded from the `/orders` response — only missions with `status` `scheduled` or `running` are returned as actionable.
+
+The next time the source planet's polling loop runs (within 5 seconds) it no longer sees the mission in its orders. The `sync_mission_streams` reconciliation detects that the mission ID has disappeared and signals the streaming task to stop by setting its stop event. The burst loop exits cleanly after the current in-flight requests complete. The mission record is retained in the Fleet API for reference but generates no further traffic.
+
+### Errors between planets
+
+The following errors can appear in the source planet's logs as `WARNING:spaceport:Mission <id> dispatch to <planet> failed: <message>`. They have different root causes and are not all equivalent.
+
+#### Connection pool exhaustion — `"failed: "` (empty message)
+
+This is the most common warning and always appears with a blank message after the colon. The spaceport creates one `httpx.AsyncClient` per active mission stream, and httpx defaults to a maximum of 100 simultaneous open connections per client. When a burst fires more concurrent requests than this limit, the excess requests queue waiting for a slot; if a slot does not free up before the timeout they fail with `httpx.PoolTimeout`, whose string representation is an empty string.
+
+The burst size is determined by RPS × the speed profile's burst multiplier:
+
+| Speed | Burst multiplier | RPS where pool starts failing |
+|---|---|---|
+| `cruise` | 0.95–1.05× | ≈ 100 RPS |
+| `warp` | 1.75–3×  | ≈ 34–57 RPS |
+| `chaotic` | 0.35–4×  | unpredictable; can fail at any RPS |
+
+Pool exhaustion is made worse by slow destinations: if the destination planet has nebula latency enabled each connection stays open longer, preventing freed slots from becoming available fast enough. With nebula at 35 ms and docking simulation adding 0.6–9 s per request, connections can be held for several seconds, dramatically reducing throughput at any burst size above the pool limit.
+
+#### Chaos-injection failures — `"failed: Client error '500 Internal Server Error'"`
+
+When `chaosExperimentsEnabled` is on in the Universe Builder, every planet's HTTP middleware randomly returns a 500 response before the request handler runs. The default failure rate is 18 % (`CHAOS_FAILURE_RATE=0.18`). The source planet calls `response.raise_for_status()` on every docking response, so any 500 is caught and logged as a warning with the HTTP status in the message.
+
+This error is independent of RPS and speed: even a single-request burst will see roughly 1 in 5 requests fail. At high RPS the raw count of failures scales linearly with burst size. Because chaos applies to all planets equally, a mission that routes through multiple hops accumulates failure probability at each hop.
+
+#### Dispatch timeouts — `"failed: timed out"` or `"failed: Read timeout"`
+
+The `httpx.AsyncClient` is constructed with a timeout equal to `MISSION_DISPATCH_TIMEOUT_SECONDS` (default 5 s). A request that does not complete within that window raises `httpx.ReadTimeout` or `httpx.ConnectTimeout`. This happens when:
+
+- Nebula density is high enough that the added latency alone exceeds the timeout. At 35 ms the timeout is rarely hit; at 4 000 ms every request that also performs multi-step docking operations (0.2–1.5 s per step × 3–6 steps = 0.6–9 s) will breach the 5-second budget.
+- The destination pod is overwhelmed by a large burst and its event loop is backlogged, causing response times to climb above the timeout.
+- Pool exhaustion and nebula latency compound: requests queued waiting for a pool slot consume part of the timeout budget before the connection is even established, so the effective time available for the actual HTTP round-trip is `timeout − queue_wait_time`.
+
+#### Connection errors — `"failed: Connect Error"` or similar
+
+These appear when the TCP connection to the destination cannot be established at all: the pod is not running, is in CrashLoopBackOff, is being replaced during a rolling update, or has been deleted by the black hole chaos job (which randomly terminates planet pods when `blackHoleEnabled` is set). The error message contains the underlying OS or network reason.
+
+#### Summary
+
+| Symptom in logs | Root cause | Triggered by |
+|---|---|---|
+| `failed: ` (empty) | httpx pool exhausted | Burst size > 100; warp/chaotic at moderate RPS; slow destinations |
+| `failed: Client error '500 ...'` | Chaos injection (18 % default) | `chaosExperimentsEnabled=true` in universe config |
+| `failed: timed out` / `Read timeout` | Response time > 5 s | High nebula density; destination pod overwhelmed |
+| `failed: Connect Error` | TCP connection refused | Pod restarting, not ready, or deleted by black hole |
+
+---
+
 ## Quick start (k3d)
 
 ### 1. Create the cluster
