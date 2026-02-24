@@ -6,7 +6,20 @@ const ActiveMissions = ({ missions, onTerminate }) => {
     const [selectedRole, setSelectedRole] = useState(null); // 'source' | 'destination'
     const [logLines, setLogLines] = useState([]);
     const [logsError, setLogsError] = useState(null);
+    const [openDropdownId, setOpenDropdownId] = useState(null);
     const logsEndRef = useRef(null);
+
+    const handleDropdownToggle = (missionId, e) => {
+        e.stopPropagation();
+        setOpenDropdownId(prev => prev === missionId ? null : missionId);
+    };
+
+    useEffect(() => {
+        if (!openDropdownId) return;
+        const handleDocClick = () => setOpenDropdownId(null);
+        document.addEventListener('click', handleDocClick);
+        return () => document.removeEventListener('click', handleDocClick);
+    }, [openDropdownId]);
 
     const selectPlanetLogs = (missionId, role) => {
         if (expandedId === missionId && selectedRole === role) {
@@ -101,12 +114,12 @@ const ActiveMissions = ({ missions, onTerminate }) => {
                                         <button
                                             className={`btn btn-sm dropdown-toggle ${expandedId === mission.id ? 'btn-secondary' : 'btn-outline-secondary'}`}
                                             type="button"
-                                            data-bs-toggle="dropdown"
-                                            aria-expanded="false"
+                                            onClick={(e) => handleDropdownToggle(mission.id, e)}
+                                            aria-expanded={openDropdownId === mission.id}
                                         >
                                             Logs
                                         </button>
-                                        <ul className="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                                        <ul className={`dropdown-menu dropdown-menu-dark dropdown-menu-end${openDropdownId === mission.id ? ' show' : ''}`}>
                                             <li>
                                                 <button
                                                     className={`dropdown-item ${expandedId === mission.id && selectedRole === 'source' ? 'active' : ''}`}

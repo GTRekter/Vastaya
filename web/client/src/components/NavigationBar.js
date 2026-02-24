@@ -6,6 +6,7 @@ const NAV_LINKS = [
     { label: 'Home', to: '/' },
     { label: 'Universe Builder', to: '/universe' },
     { label: 'Fleet Command', to: '/fleet' },
+    { label: 'Visual Universe', to: '/visual-universe' },
     { label: 'VastayaGPT', to: '/gpt' },
 ];
 
